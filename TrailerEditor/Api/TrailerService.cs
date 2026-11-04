@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,7 +7,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Serialization;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 
 namespace TrailerEditor.Api
@@ -21,12 +20,6 @@ namespace TrailerEditor.Api
         public string Type { get; set; }
         public string[] TrailerUrls { get; set; }
         public bool IsPinned { get; set; }
-    }
-
-    public class SetTrailersBody
-    {
-        public string[] Urls { get; set; }
-        public bool Pin { get; set; } = true;
     }
 
     [Route("/TrailerEditor/Search", "GET", Summary = "Finds movies and TV shows by name")]
@@ -52,18 +45,19 @@ namespace TrailerEditor.Api
     }
 
     [Route("/TrailerEditor/Items/{Id}", "POST", Summary = "Replaces the trailer links of an item. Body: { Urls: [..], Pin: true }")]
-    public class SetItemTrailers : IRequiresRequestStream, IReturn<TrailerItemInfo>
+    public class SetItemTrailers : IReturn<TrailerItemInfo>
     {
         [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
         public string Id { get; set; }
 
-        [ApiMember(Name = "Urls", Description = "Trailer links, one per line. Empty removes all trailers.", DataType = "string", ParameterType = "query")]
+        [ApiMember(Name = "Urls", Description = "Trailer links, separated by spaces or new lines.", DataType = "string", ParameterType = "query")]
         public string Urls { get; set; }
 
         [ApiMember(Name = "Pin", Description = "Pin the links so refreshes can't replace them (default true).", DataType = "bool", ParameterType = "query")]
         public bool? Pin { get; set; }
 
-        public Stream RequestStream { get; set; }
+        [ApiMember(Name = "Clear", Description = "Set to true (with no Urls) to remove all trailer links.", DataType = "bool", ParameterType = "query")]
+        public bool? Clear { get; set; }
     }
 
     [Route("/TrailerEditor/Check", "GET", Summary = "Checks whether a trailer link can play in Emby")]
@@ -84,12 +78,12 @@ namespace TrailerEditor.Api
     public class TrailerService : IService
     {
         private readonly ILibraryManager _libraryManager;
-        private readonly IJsonSerializer _json;
+        private readonly ILogger _logger;
 
-        public TrailerService(ILibraryManager libraryManager, IJsonSerializer json)
+        public TrailerService(ILibraryManager libraryManager, ILogManager logManager)
         {
             _libraryManager = libraryManager;
-            _json = json;
+            _logger = logManager.GetLogger("TrailerEditor");
         }
 
         private static TrailerManager Manager => EntryPoint.Manager;
@@ -127,72 +121,25 @@ namespace TrailerEditor.Api
         public object Post(SetItemTrailers request)
         {
             var item = RequireItem(request.Id);
+            var urls = SplitLines(request.Urls);
 
-            string[] urls;
-            var pin = request.Pin ?? true;
+            _logger.Info("Trailer Editor: save request for {0} ({1}): {2} link(s), Pin={3}, Clear={4}",
+                item.Name, item.InternalId, urls.Length, request.Pin, request.Clear);
 
-            if (request.Urls != null)
+            // Never wipe an item's trailers just because the links didn't arrive.
+            if (urls.Length == 0 && request.Clear != true)
             {
-                // Preferred: links passed as a query parameter, one per line.
-                urls = SplitLines(request.Urls);
-            }
-            else
-            {
-                // Fallback: links in the request body, as JSON { "Urls": [...], "Pin": true }
-                // or as plain text with one link per line. No body at all means "no trailers".
-                var text = ReadBody(request.RequestStream).Trim();
-                if (text.StartsWith("{", StringComparison.Ordinal))
-                {
-                    SetTrailersBody body;
-                    try
-                    {
-                        body = _json.DeserializeFromString<SetTrailersBody>(text);
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new ArgumentException("Could not read the JSON body. Expected { \"Urls\": [\"https://...\"], \"Pin\": true }", ex);
-                    }
-
-                    urls = body?.Urls ?? new string[0];
-                    if (request.Pin == null && body != null)
-                    {
-                        pin = body.Pin;
-                    }
-                }
-                else
-                {
-                    urls = SplitLines(text);
-                }
+                throw new ArgumentException("No trailer links were received, so nothing was changed. " +
+                    "To remove all trailers, send Clear=true.");
             }
 
             // Throws ArgumentException (HTTP 400) for invalid links.
-            Manager.SetTrailers(item, urls, pin);
+            Manager.SetTrailers(item, urls, request.Pin ?? true);
             return ToInfo(item);
         }
 
         private static string[] SplitLines(string value) =>
-            (value ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-        private static string ReadBody(Stream stream)
-        {
-            if (stream == null)
-            {
-                return string.Empty;
-            }
-
-            try
-            {
-                using (var reader = new StreamReader(stream))
-                {
-                    return reader.ReadToEnd();
-                }
-            }
-            catch (Exception)
-            {
-                // Emby may already have consumed or closed the body.
-                return string.Empty;
-            }
-        }
+            (value ?? string.Empty).Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
         public async Task<object> Get(CheckLink request)
         {

@@ -75,7 +75,7 @@ All endpoints need an administrator's API key or access token.
 | --- | --- | --- |
 | GET | `/emby/TrailerEditor/Search?SearchTerm=name&Limit=30` | Find movies / TV shows |
 | GET | `/emby/TrailerEditor/Items/{Id}` | Get an item's trailer links |
-| POST | `/emby/TrailerEditor/Items/{Id}?Urls=…&Pin=true` | Replace the links. `Urls` is one link per line (URL-encoded); leave it empty to remove all trailers |
+| POST | `/emby/TrailerEditor/Items/{Id}?Urls=…&Pin=true` | Replace the links. `Urls` is the links separated by spaces (URL-encoded). To remove all trailers send `Clear=true` instead of `Urls` |
 | GET | `/emby/TrailerEditor/Check?Url=…` | Check whether a link will play in Emby |
 | DELETE | `/emby/TrailerEditor/Items/{Id}/Pin` | Unpin an item |
 | GET | `/emby/TrailerEditor/Pinned` | List pinned items |

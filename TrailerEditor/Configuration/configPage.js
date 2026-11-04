@@ -202,7 +202,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 return;
             }
             loading.show();
-            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(current.Id), { Urls: urls.join('\n'), Pin: q('.te-pin').checked })
+            var query = urls.length ? { Urls: urls.join(' ') } : { Clear: true };
+            query.Pin = q('.te-pin').checked;
+            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(current.Id), query)
                 .then(function (item) {
                     loading.hide();
                     openEditor(item);

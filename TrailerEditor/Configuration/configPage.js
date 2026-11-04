@@ -79,6 +79,83 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         }
     }
 
+    var PLAYS_OK = { status: 'ok', text: 'It plays in an embedded player, so it should play in Emby.' };
+
+    function makePlayerFrame(id, muted) {
+        var iframe = document.createElement('iframe');
+        iframe.src = 'https://www.youtube.com/embed/' + id + '?enablejsapi=1&autoplay=1&playsinline=1&rel=0' +
+            (muted ? '&mute=1' : '') + '&origin=' + encodeURIComponent(window.location.origin);
+        iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen');
+        iframe.setAttribute('allowfullscreen', '');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        return iframe;
+    }
+
+    // Playback results per video id, kept for an hour while the dashboard is open.
+    var playResults = {};
+    function rememberResult(id, result) {
+        if (result.status !== 'unknown') { playResults[id] = { time: Date.now(), result: result }; }
+    }
+    function knownResult(id) {
+        var entry = playResults[id];
+        return entry && Date.now() - entry.time < 3600000 ? entry.result : null;
+    }
+
+    // Plays the video muted in a tiny, invisible embedded player and reports
+    // whether YouTube allowed it. Tests run one at a time.
+    var autoQueue = Promise.resolve();
+    function autoTest(id) {
+        var known = knownResult(id);
+        if (known) { return Promise.resolve(known); }
+        var run = autoQueue.then(function () {
+            return knownResult(id) || playHidden(id);
+        });
+        autoQueue = run.catch(function () { /* keep the queue going */ });
+        return run;
+    }
+
+    function playHidden(id) {
+        return loadYouTubeApi().then(function (YT) {
+            return new Promise(function (resolve) {
+                var holder = document.createElement('div');
+                holder.setAttribute('aria-hidden', 'true');
+                holder.style.cssText = 'position:fixed;right:0;bottom:0;width:200px;height:113px;opacity:0.01;pointer-events:none;overflow:hidden;';
+                var iframe = makePlayerFrame(id, true);
+                iframe.style.cssText = 'width:200px;height:113px;border:0;';
+                holder.appendChild(iframe);
+                document.body.appendChild(holder);
+
+                var player = null;
+                var done = false;
+                var timer = null;
+                function finish(result) {
+                    if (done) { return; }
+                    done = true;
+                    clearTimeout(timer);
+                    try { if (player && player.destroy) { player.destroy(); } } catch (e) { /* ignore */ }
+                    if (holder.parentNode) { holder.parentNode.removeChild(holder); }
+                    rememberResult(id, result);
+                    resolve(result);
+                }
+
+                player = new YT.Player(iframe, {
+                    events: {
+                        onReady: function (e) {
+                            try { e.target.mute(); e.target.playVideo(); } catch (x) { /* ignore */ }
+                        },
+                        onStateChange: function (e) { if (e.data === 1) { finish(PLAYS_OK); } },
+                        onError: function (e) { finish(playerError(e.data)); }
+                    }
+                });
+                timer = setTimeout(function () {
+                    finish({ status: 'unknown', text: 'The automatic playback test didn\'t finish. Press Test to be sure.' });
+                }, 15000);
+            });
+        }, function () {
+            return { status: 'unknown', text: 'Couldn\'t load the YouTube player for the automatic test. Press Test to be sure.' };
+        });
+    }
+
     function View(view, params) {
         BaseView.apply(this, arguments);
 
@@ -157,14 +234,36 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 var seq = ++checkSeq;
                 if (!value) { setCheck('', ''); return; }
                 setCheck('pending', 'Checking whether this plays in Emby…');
+                var id = youTubeId(value);
+                var title = '';
+
+                // Step 2: play it in an invisible embedded player, like Emby does.
+                // This also catches copyright blocks, which the server can't see.
+                function playbackTest(serverStatus, serverText) {
+                    if (!id || serverStatus === 'error') { return; }
+                    setCheck('pending', serverText + ' Testing playback…');
+                    autoTest(id).then(function (r) {
+                        if (seq !== checkSeq) { return; }
+                        if (r.status === 'unknown') {
+                            setCheck(serverStatus, serverText + ' ' + r.text);
+                        } else {
+                            setCheck(r.status, (r.status === 'ok' ? '✓ ' : '✗ ') + title + r.text);
+                        }
+                    });
+                }
+
+                // Step 1: the server asks YouTube about the video.
                 api('GET', 'TrailerEditor/Check', { Url: value }).then(function (r) {
                     if (seq !== checkSeq) { return; }
-                    var title = r.Title ? '"' + r.Title + '"' + (r.Channel ? ' by ' + r.Channel : '') + ': ' : '';
+                    title = r.Title ? '"' + r.Title + '"' + (r.Channel ? ' by ' + r.Channel : '') + ': ' : '';
                     var icon = r.Status === 'ok' ? '✓ ' : r.Status === 'error' ? '✗ ' : '? ';
-                    setCheck(r.Status, icon + title + (r.Message || ''));
+                    var text = icon + title + (r.Message || '');
+                    setCheck(r.Status, text);
+                    playbackTest(r.Status, text);
                 }, function () {
                     if (seq !== checkSeq) { return; }
                     setCheck('unknown', '? Couldn\'t check this link.');
+                    playbackTest('unknown', '?');
                 });
             }
 
@@ -231,18 +330,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             result.textContent = 'Loading the YouTube player…';
             panel.style.display = '';
 
-            var iframe = document.createElement('iframe');
+            var iframe = makePlayerFrame(id, false);
             iframe.className = 'te-testIframe';
-            iframe.src = 'https://www.youtube.com/embed/' + id + '?enablejsapi=1&autoplay=1&playsinline=1&rel=0&origin=' +
-                encodeURIComponent(window.location.origin);
-            iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen');
-            iframe.setAttribute('allowfullscreen', '');
-            iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
             q('.te-testFrame').appendChild(iframe);
             panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
             function finish(status, text) {
                 if (seq !== testSeq) { return; }
+                rememberResult(id, { status: status, text: text });
                 clearTimeout(testTimer);
                 result.className = 'te-testResult te-check-' + status;
                 result.textContent = text;
@@ -257,7 +352,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                         onReady: function (e) { try { e.target.playVideo(); } catch (x) { /* autoplay may be blocked */ } },
                         onStateChange: function (e) {
                             if (e.data === 1) { // playing
-                                finish('ok', 'It plays in an embedded player, so it should play in Emby.');
+                                finish(PLAYS_OK.status, PLAYS_OK.text);
                             }
                         },
                         onError: function (e) {

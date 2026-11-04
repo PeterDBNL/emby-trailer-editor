@@ -42,21 +42,23 @@ Leave every link box empty and save to remove all trailers from the item.
 
 Emby plays YouTube trailers through YouTube's embedded player, and YouTube refuses to play
 some videos there. Emby then shows *"No compatible streams are currently available"*.
-There are two checks:
+Every YouTube link is checked automatically as soon as it is shown or pasted, in two steps:
 
-**Automatic check.** As soon as a link is shown or pasted, your Emby server asks YouTube
-about it and a note appears under the link:
+1. **Server check.** Your Emby server asks YouTube about the video. This catches embedding
+   turned off by the uploader, age-restricted, private and deleted videos.
+2. **Playback test.** The page plays the video for a moment, muted, in a tiny invisible
+   YouTube embedded player: the same kind of player Emby uses. This also catches videos
+   where a **copyright owner blocks playback in other apps**, which is common for fan edits
+   and re-uploads of studio trailers and is invisible to the server check.
 
-- ✓ **No problems found**, with the video's title and channel
-- ✗ **Won't play**: embedding turned off by the uploader, age-restricted, private or deleted
-- ? **Couldn't check**: e.g. the server can't reach YouTube, or it isn't a YouTube link
+The result shows under the link:
 
-**Test button.** Plays the link in YouTube's embedded player right on the Trailer Editor
-page, the same kind of player Emby uses, and reports the result under the link. This also
-catches videos where a **copyright owner blocks playback in other apps**, which is common for
-fan edits and re-uploads of studio trailers and can't be seen by the automatic check.
-If the test plays, the trailer will play in Emby.
+- ✓ **It plays in an embedded player, so it should play in Emby.**
+- ✗ **Won't play**, with the reason
+- ? **Couldn't check**, e.g. YouTube didn't answer or it isn't a YouTube link
 
+Links are tested one at a time and results are remembered for an hour. The **Test** button
+runs the same playback test in a visible player, so you can watch the trailer yourself.
 Saving a link marked ✗ asks for confirmation first, but is still allowed.
 
 ### Pinning

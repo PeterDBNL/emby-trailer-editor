@@ -91,7 +91,7 @@ namespace TrailerEditor
             if (result.Status == null)
             {
                 result.Status = Ok;
-                result.Message = "No problems found. Press Test to be sure: copyright blocks only show up there.";
+                result.Message = "No problems found.";
             }
 
             if (result.Status != Unknown)

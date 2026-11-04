@@ -57,7 +57,7 @@ All endpoints need an administrator's API key or access token.
 | --- | --- | --- |
 | GET | `/emby/TrailerEditor/Search?SearchTerm=name&Limit=30` | Find movies / TV shows |
 | GET | `/emby/TrailerEditor/Items/{Id}` | Get an item's trailer links |
-| POST | `/emby/TrailerEditor/Items/{Id}` | Replace the links. Body: `{"Urls": ["https://…"], "Pin": true}` |
+| POST | `/emby/TrailerEditor/Items/{Id}?Urls=…&Pin=true` | Replace the links. `Urls` is one link per line (URL-encoded); leave it empty to remove all trailers |
 | DELETE | `/emby/TrailerEditor/Items/{Id}/Pin` | Unpin an item |
 | GET | `/emby/TrailerEditor/Pinned` | List pinned items |
 
@@ -66,9 +66,10 @@ All endpoints need an administrator's API key or access token.
 Example:
 
 ```sh
-curl -X POST "http://localhost:8096/emby/TrailerEditor/Items/12345?api_key=YOUR_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"Urls": ["https://youtu.be/dQw4w9WgXcQ"], "Pin": true}'
+curl -X POST -G "http://localhost:8096/emby/TrailerEditor/Items/12345" \
+  --data-urlencode "api_key=YOUR_KEY" \
+  --data-urlencode "Urls=https://youtu.be/dQw4w9WgXcQ" \
+  --data-urlencode "Pin=true"
 ```
 
 ## Build

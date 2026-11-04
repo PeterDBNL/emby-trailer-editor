@@ -44,13 +44,16 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             el.className = 'te-msg ' + (text ? (isError ? 'err' : 'ok') : '');
         }
 
-        function api(method, path, body) {
-            var options = { type: method, url: ApiClient.getUrl(path), dataType: 'json' };
-            if (body !== undefined) {
-                options.data = JSON.stringify(body);
-                options.contentType = 'application/json';
+        // Everything goes in the URL. Emby can consume a plugin's request body
+        // before the plugin sees it, so no request body is sent.
+        function api(method, path, query) {
+            var url = ApiClient.getUrl(path);
+            if (query) {
+                url += (url.indexOf('?') === -1 ? '?' : '&') + Object.keys(query).map(function (k) {
+                    return encodeURIComponent(k) + '=' + encodeURIComponent(query[k]);
+                }).join('&');
             }
-            return ApiClient.ajax(options);
+            return ApiClient.ajax({ type: method, url: url, dataType: 'json' });
         }
 
         function renderList(container, items, emptyText) {
@@ -144,7 +147,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         function search(term) {
             if (!term) { q('.te-results').innerHTML = ''; return; }
             loading.show();
-            api('GET', 'TrailerEditor/Search?SearchTerm=' + encodeURIComponent(term) + '&Limit=30').then(function (items) {
+            api('GET', 'TrailerEditor/Search', { SearchTerm: term, Limit: 30 }).then(function (items) {
                 loading.hide();
                 renderList(q('.te-results'), items, 'No movies or TV shows found.');
             }, function (err) {
@@ -158,7 +161,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             var urls = Array.prototype.map.call(view.querySelectorAll('.te-url'), function (i) { return i.value.trim(); })
                 .filter(function (v) { return v; });
             loading.show();
-            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(current.Id), { Urls: urls, Pin: q('.te-pin').checked })
+            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(current.Id), { Urls: urls.join('\n'), Pin: q('.te-pin').checked })
                 .then(function (item) {
                     loading.hide();
                     openEditor(item);

@@ -55,6 +55,12 @@ namespace TrailerEditor.Api
         [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
         public string Id { get; set; }
 
+        [ApiMember(Name = "Urls", Description = "Trailer links, one per line. Empty removes all trailers.", DataType = "string", ParameterType = "query")]
+        public string Urls { get; set; }
+
+        [ApiMember(Name = "Pin", Description = "Pin the links so refreshes can't replace them (default true).", DataType = "bool", ParameterType = "query")]
+        public bool? Pin { get; set; }
+
         public Stream RequestStream { get; set; }
     }
 
@@ -113,24 +119,70 @@ namespace TrailerEditor.Api
         {
             var item = RequireItem(request.Id);
 
-            SetTrailersBody body;
-            try
-            {
-                body = _json.DeserializeFromStream<SetTrailersBody>(request.RequestStream);
-            }
-            catch (Exception ex)
-            {
-                throw new ArgumentException("Request body must be JSON like { \"Urls\": [\"https://...\"], \"Pin\": true }", ex);
-            }
+            string[] urls;
+            var pin = request.Pin ?? true;
 
-            if (body == null)
+            if (request.Urls != null)
             {
-                throw new ArgumentException("Request body is missing.");
+                // Preferred: links passed as a query parameter, one per line.
+                urls = SplitLines(request.Urls);
+            }
+            else
+            {
+                // Fallback: links in the request body, as JSON { "Urls": [...], "Pin": true }
+                // or as plain text with one link per line. No body at all means "no trailers".
+                var text = ReadBody(request.RequestStream).Trim();
+                if (text.StartsWith("{", StringComparison.Ordinal))
+                {
+                    SetTrailersBody body;
+                    try
+                    {
+                        body = _json.DeserializeFromString<SetTrailersBody>(text);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new ArgumentException("Could not read the JSON body. Expected { \"Urls\": [\"https://...\"], \"Pin\": true }", ex);
+                    }
+
+                    urls = body?.Urls ?? new string[0];
+                    if (request.Pin == null && body != null)
+                    {
+                        pin = body.Pin;
+                    }
+                }
+                else
+                {
+                    urls = SplitLines(text);
+                }
             }
 
             // Throws ArgumentException (HTTP 400) for invalid links.
-            Manager.SetTrailers(item, body.Urls ?? new string[0], body.Pin);
+            Manager.SetTrailers(item, urls, pin);
             return ToInfo(item);
+        }
+
+        private static string[] SplitLines(string value) =>
+            (value ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+        private static string ReadBody(Stream stream)
+        {
+            if (stream == null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                using (var reader = new StreamReader(stream))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+            catch (Exception)
+            {
+                // Emby may already have consumed or closed the body.
+                return string.Empty;
+            }
         }
 
         public object Delete(UnpinItem request)

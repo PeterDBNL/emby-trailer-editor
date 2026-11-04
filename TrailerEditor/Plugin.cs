@@ -25,6 +25,14 @@ namespace TrailerEditor
 
         public override Guid Id => new Guid("6f1d7a7e-3c1b-4f4e-9b8a-2d5c0e7a91b4");
 
+        public override void UpdateConfiguration(BasePluginConfiguration configuration)
+        {
+            base.UpdateConfiguration(configuration);
+
+            // Settings were saved from the Trailer Library page: apply the scan schedule.
+            EntryPoint.ApplyScanSchedule();
+        }
+
         public IEnumerable<PluginPageInfo> GetPages()
         {
             return new[]

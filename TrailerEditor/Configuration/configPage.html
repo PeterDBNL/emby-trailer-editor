@@ -24,7 +24,7 @@
                     #trailerEditorPage .te-msg.err { display: block; background: rgba(204,51,51,.25); }
                     #trailerEditorPage .te-section { margin-top: 2em; }
                     #trailerEditorPage .te-nav { display: flex; align-items: center; justify-content: space-between; gap: 1em; flex-wrap: wrap; margin-bottom: .5em; }
-                    #trailerEditorPage .te-nav a { margin: 0; }
+                    #trailerEditorPage .te-nav .raised { margin: 0; }
                     #trailerEditorPage .te-check { flex-basis: 100%; font-size: .9em; margin: -.2em 0 .4em 104px; min-height: 1em; }
                     #trailerEditorPage .te-check-ok { color: #52b54b; }
                     #trailerEditorPage .te-check-error { color: #e05252; }
@@ -39,7 +39,7 @@
 
                 <div class="te-nav">
                     <h2 class="sectionTitle" style="margin:0;">Trailer Editor</h2>
-                    <a is="emby-linkbutton" class="raised" href="#!/configurationpage?name=trailereditorlibrary"><span>Library scan &amp; pinned items</span></a>
+                    <button is="emby-button" type="button" class="raised te-goLibrary"><span>Library scan &amp; pinned items</span></button>
                 </div>
                 <p class="fieldDescription">
                     Find a movie or TV show, then add, change or remove its trailer links.

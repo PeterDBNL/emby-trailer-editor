@@ -63,7 +63,7 @@ public class ScanTaskTests
         plugin.Configuration.ScanRecheckDays = 30;
 
         _library.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(() => _items);
-        new EntryPoint(_library.Object, logManager.Object, paths.Object, new Mock<IJsonSerializer>().Object, new Mock<MediaBrowser.Controller.Session.ISessionManager>().Object);
+        new EntryPoint(_library.Object, logManager.Object, paths.Object, new Mock<IJsonSerializer>().Object, new Mock<MediaBrowser.Controller.Session.ISessionManager>().Object, new Mock<MediaBrowser.Model.Tasks.ITaskManager>().Object);
         EntryPoint.Checker = _checker;
 
         _checker.Answer = url => url.Contains("blockblock1")
@@ -230,6 +230,34 @@ public class ScanTaskTests
 
         Assert.Single(EntryPoint.Store.GetIssues());
         Assert.Empty(EntryPoint.Store.GetPlaybackQueue(10, 30));
+    }
+
+    [Fact]
+    public void NoAutomaticScanByDefault()
+    {
+        var config = new TrailerEditor.Configuration.PluginConfiguration();
+        Assert.Empty(ScanTask.GetDefaultTriggers());
+        Assert.Empty(TrailerScanTask.TriggersFor(config));
+        Assert.Null(TrailerScanTask.Describe(config));
+        Assert.True(config.ScanBrowserPlaybackTest);
+        Assert.True(config.ScanCheckAgeRestriction);
+    }
+
+    [Fact]
+    public void ScheduleSettingsBecomeTriggers()
+    {
+        var config = new TrailerEditor.Configuration.PluginConfiguration { ScanSchedule = "Weekly", ScanScheduleDay = 3, ScanScheduleHour = 22 };
+        var weekly = TrailerScanTask.TriggersFor(config).Single();
+        Assert.Equal(MediaBrowser.Model.Tasks.TaskTriggerInfo.TriggerWeekly, weekly.Type);
+        Assert.Equal(DayOfWeek.Wednesday, weekly.DayOfWeek);
+        Assert.Equal(TimeSpan.FromHours(22).Ticks, weekly.TimeOfDayTicks);
+        Assert.Equal("every Wednesday at 22:00", TrailerScanTask.Describe(config));
+
+        config.ScanSchedule = "Daily";
+        config.ScanScheduleHour = 4;
+        var daily = TrailerScanTask.TriggersFor(config).Single();
+        Assert.Equal(MediaBrowser.Model.Tasks.TaskTriggerInfo.TriggerDaily, daily.Type);
+        Assert.Equal("every day at 04:00", TrailerScanTask.Describe(config));
     }
 
     [Fact]

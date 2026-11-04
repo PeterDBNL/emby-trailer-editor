@@ -13,7 +13,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     var settingNames = ['PinEditedTrailers', 'ScanReportNoTrailers', 'ScanIgnoreItemsWithLocalTrailers',
         'ScanCheckLinks', 'ScanCheckAgeRestriction', 'ScanBrowserPlaybackTest', 'ScanLearnFromPlayback',
-        'ScanRequestDelayMs', 'ScanRecheckDays'];
+        'ScanRequestDelayMs', 'ScanRecheckDays', 'ScanSchedule', 'ScanScheduleDay', 'ScanScheduleHour'];
+    var textSettings = { ScanSchedule: true };
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -31,8 +32,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return ApiClient.ajax({ type: method, url: url, dataType: 'json' });
     }
 
-    function editorLink(id) {
-        return '#!/configurationpage?name=trailereditor&id=' + encodeURIComponent(id);
+    // Opens another plugin page through Emby's own router (the same way Emby links to plugin pages).
+    // An item id is also left in sessionStorage, so the editor finds it however the page opens.
+    function goToPage(name, id) {
+        try {
+            if (id) { sessionStorage.setItem('trailerEditorOpenId', String(id)); }
+        } catch (e) { /* storage may be unavailable */ }
+        var path = 'configurationpage?name=' + encodeURIComponent(name) + (id ? '&id=' + encodeURIComponent(id) : '');
+        if (window.Dashboard && typeof window.Dashboard.navigate === 'function') {
+            window.Dashboard.navigate(path);
+        } else {
+            window.location.hash = '#!/' + path;
+        }
+    }
+
+    function editButton(id) {
+        return '<button is="emby-button" type="button" class="raised tl-edit" data-id="' + escapeHtml(id) + '"><span>Edit trailers</span></button>';
     }
 
     function itemMeta(year, type) {
@@ -224,11 +239,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             query: function () { return { Kind: q('.tl-kind').value, SearchTerm: q('.tl-issueSearch').value.trim() }; },
             empty: function () { return lastState && lastState.HasResults ? 'No problems found.' : 'No scan has run yet. Press Scan now.'; },
             render: function (i) {
-                return '<a class="tl-row" href="' + editorLink(i.ItemId) + '">' +
+                return '<div class="tl-row"><div>' +
                     '<div>' + escapeHtml(i.ItemName) + ' <span class="tl-meta">' + escapeHtml(itemMeta(i.Year, i.Type)) + '</span></div>' +
                     '<div class="tl-issue tl-kind-' + escapeHtml(i.Kind) + '">' + escapeHtml(kindLabels[i.Kind] || i.Kind) + ': ' + escapeHtml(i.Message) + '</div>' +
                     (i.Url ? '<div class="tl-url">' + escapeHtml(i.Url) + '</div>' : '') +
-                    '</a>';
+                    '</div>' + editButton(i.ItemId) + '</div>';
             }
         });
 
@@ -241,13 +256,35 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             empty: function () { return q('.tl-pinnedSearch').value.trim() ? 'No pinned items match.' : 'No pinned items yet.'; },
             render: function (item) {
                 var count = (item.TrailerUrls || []).length;
-                return '<a class="tl-row" href="' + editorLink(item.Id) + '">' +
-                    '<div>' + escapeHtml(item.Name) + ' <span class="tl-meta">' + escapeHtml(itemMeta(item.Year, item.Type)) +
-                    ' · ' + (count === 1 ? '1 trailer' : count + ' trailers') + '</span></div></a>';
+                return '<div class="tl-row"><div>' + escapeHtml(item.Name) + ' <span class="tl-meta">' + escapeHtml(itemMeta(item.Year, item.Type)) +
+                    ' · ' + (count === 1 ? '1 trailer' : count + ' trailers') + '</span></div>' + editButton(item.Id) + '</div>';
             }
         });
 
         q('.tl-kind').addEventListener('change', function () { issues.reset(); });
+
+        function onEditClick(e) {
+            var button = e.target.closest('.tl-edit');
+            if (button) { goToPage('trailereditor', button.getAttribute('data-id')); }
+        }
+        q('.tl-issues').addEventListener('click', onEditClick);
+        q('.tl-pinned').addEventListener('click', onEditClick);
+        q('.tl-goEditor').addEventListener('click', function () { goToPage('trailereditor'); });
+
+        // Hour choices, and only show "Day" for weekly scans.
+        var hourSelect = q('.tl-ScanScheduleHour');
+        for (var h = 0; h < 24; h++) {
+            var option = document.createElement('option');
+            option.value = String(h);
+            option.textContent = (h < 10 ? '0' : '') + h + ':00';
+            hourSelect.appendChild(option);
+        }
+        function updateScheduleFields() {
+            var mode = q('.tl-ScanSchedule').value;
+            q('.tl-dayContainer').style.display = mode === 'Weekly' ? '' : 'none';
+            q('.tl-hourContainer').style.display = mode === 'Off' ? 'none' : '';
+        }
+        q('.tl-ScanSchedule').addEventListener('change', updateScheduleFields);
         q('.tl-issueSearch').addEventListener('input', debounce(function () { issues.reset(); }, 400));
         q('.tl-pinnedSearch').addEventListener('input', debounce(function () { pinned.reset(); }, 400));
 
@@ -304,7 +341,26 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             self._lastFinished = s.FinishedUtc;
 
             renderPlayback(s);
+            renderWarnings(s);
             schedulePoll(running ? 2000 : 15000);
+        }
+
+        function renderWarnings(s) {
+            var warnings = [];
+            if (s.BrowserPlaybackTest) {
+                warnings.push('Copyright-block test is on. It only runs while this Trailer Library page stays open and visible in a browser window. ' +
+                    'If you close the page, switch tabs or the computer sleeps, it pauses until you open this page again.');
+            }
+            if (s.AgeRestrictionCheck) {
+                warnings.push('Age-restriction check is on. Every link needs two requests to YouTube, so scans take about twice as long ' +
+                    'and YouTube is more likely to slow them down.');
+            }
+            q('.tl-warnings').innerHTML = warnings.map(function (w) {
+                return '<div class="tl-warning">⚠ ' + escapeHtml(w) + '</div>';
+            }).join('');
+            q('.tl-schedule').textContent = s.Schedule
+                ? 'Automatic scan: ' + s.Schedule + '. Change this under Settings.'
+                : 'Automatic scan: off. You can turn it on under Settings.';
         }
 
         function loadStatus() {
@@ -342,8 +398,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                 settingNames.forEach(function (name) {
                     var el = q('.tl-' + name);
-                    if (el.type === 'checkbox') { el.checked = !!config[name]; } else { el.value = config[name]; }
+                    if (el.type === 'checkbox') { el.checked = !!config[name]; } else { el.value = String(config[name] == null ? '' : config[name]); }
                 });
+                if (!q('.tl-ScanSchedule').value) { q('.tl-ScanSchedule').value = 'Off'; }
+                updateScheduleFields();
             });
         }
 
@@ -354,6 +412,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     var el = q('.tl-' + name);
                     if (el.type === 'checkbox') {
                         config[name] = el.checked;
+                    } else if (textSettings[name]) {
+                        config[name] = el.value;
                     } else {
                         var n = parseInt(el.value, 10);
                         if (!isNaN(n)) { config[name] = Math.max(0, n); }

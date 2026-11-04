@@ -13,7 +13,7 @@
 
                 <style>
                     #trailerLibraryPage .tl-nav { display: flex; align-items: center; justify-content: space-between; gap: 1em; flex-wrap: wrap; margin-bottom: 1em; }
-                    #trailerLibraryPage .tl-nav a { margin: 0; }
+                    #trailerLibraryPage .tl-nav .raised { margin: 0; }
                     #trailerLibraryPage .tl-meta { opacity: .7; font-size: .9em; }
                     #trailerLibraryPage .tl-box { padding: .8em 1em; border-radius: 6px; background: rgba(128,128,128,.08); margin-bottom: 1em; }
                     #trailerLibraryPage .tl-buttons { display: flex; gap: .5em; flex-wrap: wrap; margin-top: .8em; }
@@ -29,8 +29,14 @@
                     #trailerLibraryPage .tl-body { padding: 0 1em 1em; }
                     #trailerLibraryPage .tl-filters { display: flex; gap: .8em; flex-wrap: wrap; align-items: flex-end; margin-bottom: .6em; }
                     #trailerLibraryPage .tl-filters .inputContainer, #trailerLibraryPage .tl-filters .selectContainer { flex: 1 1 14em; margin: 0; }
-                    #trailerLibraryPage .tl-row { display: block; padding: .6em .8em; border-radius: 6px; background: rgba(128,128,128,.08); margin-bottom: .4em; color: inherit; text-decoration: none; }
-                    #trailerLibraryPage .tl-row:hover { background: rgba(128,128,128,.18); }
+                    #trailerLibraryPage .tl-row { display: flex; align-items: center; justify-content: space-between; gap: 1em; padding: .6em .8em; border-radius: 6px; background: rgba(128,128,128,.08); margin-bottom: .4em; }
+                    #trailerLibraryPage .tl-row > div { min-width: 0; }
+                    #trailerLibraryPage .tl-row .raised { margin: 0; flex: none; }
+                    #trailerLibraryPage .tl-warnings { margin-top: .6em; }
+                    #trailerLibraryPage .tl-warning { padding: .5em .8em; border-radius: 6px; background: rgba(224,160,48,.15); margin-bottom: .4em; font-size: .92em; }
+                    #trailerLibraryPage .tl-schedule { margin-top: .6em; font-size: .92em; }
+                    #trailerLibraryPage .tl-inline { display: flex; gap: .8em; flex-wrap: wrap; }
+                    #trailerLibraryPage .tl-inline .selectContainer { flex: 0 1 14em; }
                     #trailerLibraryPage .tl-issue { font-size: .9em; margin-top: .15em; }
                     #trailerLibraryPage .tl-kind-Unplayable, #trailerLibraryPage .tl-kind-InvalidLink { color: #e05252; }
                     #trailerLibraryPage .tl-kind-DuplicateLink { color: #e0a030; }
@@ -42,7 +48,7 @@
 
                 <div class="tl-nav">
                     <h2 class="sectionTitle" style="margin:0;">Trailer Library</h2>
-                    <a is="emby-linkbutton" class="raised" href="#!/configurationpage?name=trailereditor"><span>Trailer Editor</span></a>
+                    <button is="emby-button" type="button" class="raised tl-goEditor"><span>Trailer Editor</span></button>
                 </div>
 
                 <div class="tl-box">
@@ -52,12 +58,11 @@
                     <div class="tl-note" style="display:none;"></div>
                     <div class="tl-chips"></div>
                     <div class="tl-playback tl-meta" style="margin-top:.6em;"></div>
+                    <div class="tl-warnings"></div>
+                    <div class="tl-schedule"></div>
                     <div class="tl-buttons">
                         <button is="emby-button" type="button" class="raised button-submit tl-scan"><span>Scan now</span></button>
                         <button is="emby-button" type="button" class="raised tl-cancel" style="display:none;"><span>Stop scan</span></button>
-                    </div>
-                    <div class="fieldDescription" style="margin-top:.8em;">
-                        The scan also runs weekly; change that under <em>Scheduled Tasks → Trailer Editor</em>.
                     </div>
                 </div>
 
@@ -108,6 +113,29 @@
                         </div>
 
                         <h3>Library scan</h3>
+                        <div class="tl-inline">
+                            <div class="selectContainer">
+                                <select is="emby-select" class="tl-ScanSchedule" label="Scan automatically">
+                                    <option value="Off">Off (only when I press Scan now)</option>
+                                    <option value="Daily">Every day</option>
+                                    <option value="Weekly">Every week</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer tl-dayContainer">
+                                <select is="emby-select" class="tl-ScanScheduleDay" label="Day">
+                                    <option value="0">Sunday</option>
+                                    <option value="1">Monday</option>
+                                    <option value="2">Tuesday</option>
+                                    <option value="3">Wednesday</option>
+                                    <option value="4">Thursday</option>
+                                    <option value="5">Friday</option>
+                                    <option value="6">Saturday</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer tl-hourContainer">
+                                <select is="emby-select" class="tl-ScanScheduleHour" label="Time"></select>
+                            </div>
+                        </div>
                         <div class="checkboxContainer">
                             <label>
                                 <input is="emby-checkbox" type="checkbox" class="tl-ScanReportNoTrailers" />

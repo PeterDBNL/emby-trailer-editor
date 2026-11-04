@@ -46,17 +46,45 @@ namespace TrailerEditor.Scanning
 
         public bool IsLogged => true;
 
-        public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
+        /// <summary>No schedule by default; it's set from the plugin's settings (see ScanSchedule).</summary>
+        public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => new TaskTriggerInfo[0];
+
+        /// <summary>The triggers that match the plugin's schedule settings.</summary>
+        public static TaskTriggerInfo[] TriggersFor(Configuration.PluginConfiguration config)
         {
-            return new[]
+            var time = TimeSpan.FromHours(Math.Max(0, Math.Min(23, config.ScanScheduleHour))).Ticks;
+            switch (config.ScanSchedule)
             {
-                new TaskTriggerInfo
-                {
-                    Type = TaskTriggerInfo.TriggerWeekly,
-                    DayOfWeek = DayOfWeek.Sunday,
-                    TimeOfDayTicks = TimeSpan.FromHours(3).Ticks
-                }
-            };
+                case "Daily":
+                    return new[] { new TaskTriggerInfo { Type = TaskTriggerInfo.TriggerDaily, TimeOfDayTicks = time } };
+                case "Weekly":
+                    return new[]
+                    {
+                        new TaskTriggerInfo
+                        {
+                            Type = TaskTriggerInfo.TriggerWeekly,
+                            DayOfWeek = (DayOfWeek)Math.Max(0, Math.Min(6, config.ScanScheduleDay)),
+                            TimeOfDayTicks = time
+                        }
+                    };
+                default:
+                    return new TaskTriggerInfo[0];
+            }
+        }
+
+        /// <summary>Human-readable schedule, e.g. "every Sunday at 03:00".</summary>
+        public static string Describe(Configuration.PluginConfiguration config)
+        {
+            var hour = Math.Max(0, Math.Min(23, config.ScanScheduleHour)).ToString("00") + ":00";
+            switch (config.ScanSchedule)
+            {
+                case "Daily":
+                    return "every day at " + hour;
+                case "Weekly":
+                    return "every " + (DayOfWeek)Math.Max(0, Math.Min(6, config.ScanScheduleDay)) + " at " + hour;
+                default:
+                    return null;
+            }
         }
 
         public async Task Execute(CancellationToken cancellationToken, IProgress<double> progress)

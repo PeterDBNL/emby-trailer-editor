@@ -85,13 +85,19 @@ Trailer Editor page. It has:
     trailer files)
   - *Invalid link* and *Duplicate link*
 
-  Press **Scan now**, or let it run on its weekly schedule (change it under
-  *Scheduled Tasks → Trailer Editor → Scan trailer links*). Progress is shown on the page and
-  in Scheduled Tasks. Click the summary buttons to filter the results, and click a title to
-  open it in the editor. Saving a title in the editor removes its results until the next scan.
+  Press **Scan now**, or turn on an automatic daily or weekly scan under *Settings* (off by
+  default). Progress is shown on the page and in Scheduled Tasks. Click the summary buttons to
+  filter the results, and press **Edit trailers** on a title to fix it in the editor. Saving a
+  title in the editor removes its results until the next scan.
 - **Scan results**, **Pinned items** and **Settings**: collapsible sections. The lists load
   only when opened, are searchable by title and are paged 50 at a time, so they stay fast
   with tens of thousands of titles.
+
+**Age restrictions (on by default).** Detecting age-restricted videos needs a second request to
+YouTube for every link, so scans take about twice as long. Turn it off under Settings if scans are
+too slow.
+
+The Library scan panel shows a warning while either of these options is on.
 
 **Large libraries.** The scan pauses between YouTube requests (1 second by default, about
 3,600 links an hour) so YouTube doesn't block your server. A link's result is reused for 30
@@ -99,10 +105,10 @@ days, so after the first full scan, weekly scans only check new and older links.
 starts refusing requests, the scan slows down, and after 25 failures in a row it stops checking
 links for that run and says so. All of this can be changed under *Settings*.
 
-**Copyright blocks (optional, needs an open browser).** Some videos, often fan edits and
+**Copyright blocks (on by default, needs an open browser).** Some videos, often fan edits and
 re-uploads of studio trailers, are blocked by a copyright owner from playing in other apps.
-Only a browser can detect this. Tick *Test playback in this browser to catch copyright blocks*
-under Settings, and the Trailer Library page plays each scanned link for a moment, muted, in a
+Only a browser can detect this. With *Test playback in this browser to catch copyright blocks*
+ticked under Settings, the Trailer Library page plays each scanned link for a moment, muted, in a
 hidden YouTube player. **This only runs while the Trailer Library page stays open and visible
 in a browser window.** If you close it, switch tabs or the computer sleeps, testing pauses and
 continues where it left off the next time you open the page. Blocked links appear in the scan

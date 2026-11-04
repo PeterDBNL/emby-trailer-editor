@@ -70,6 +70,10 @@ namespace TrailerEditor.Api
         public int DuplicateLinkCount { get; set; }
         public int PinnedCount { get; set; }
         public bool BrowserPlaybackTest { get; set; }
+        public bool AgeRestrictionCheck { get; set; }
+
+        /// <summary>e.g. "every Sunday at 03:00", or null when automatic scans are off.</summary>
+        public string Schedule { get; set; }
         public int PlaybackTotal { get; set; }
         public int PlaybackDone { get; set; }
         public int PlaybackBlocked { get; set; }
@@ -312,6 +316,8 @@ namespace TrailerEditor.Api
                 DuplicateLinkCount = issues.Count(i => i.Kind == IssueKinds.DuplicateLink),
                 PinnedCount = Manager.PinnedCount,
                 BrowserPlaybackTest = config.ScanBrowserPlaybackTest,
+                AgeRestrictionCheck = config.ScanCheckLinks && config.ScanCheckAgeRestriction,
+                Schedule = TrailerScanTask.Describe(config),
                 PlaybackTotal = playback.Total,
                 PlaybackDone = playback.Done,
                 PlaybackBlocked = playback.Blocked

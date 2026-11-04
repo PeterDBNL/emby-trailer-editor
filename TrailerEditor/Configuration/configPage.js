@@ -162,6 +162,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         });
     }
 
+    // Opens another plugin page through Emby's own router (the same way Emby links to plugin pages).
+    // An item id is also left in sessionStorage, so the editor finds it however the page opens.
+    function goToPage(name, id) {
+        try {
+            if (id) { sessionStorage.setItem('trailerEditorOpenId', String(id)); }
+        } catch (e) { /* storage may be unavailable */ }
+        var path = 'configurationpage?name=' + encodeURIComponent(name) + (id ? '&id=' + encodeURIComponent(id) : '');
+        if (window.Dashboard && typeof window.Dashboard.navigate === 'function') {
+            window.Dashboard.navigate(path);
+        } else {
+            window.location.hash = '#!/' + path;
+        }
+    }
+
     function View(view, params) {
         BaseView.apply(this, arguments);
 
@@ -477,6 +491,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         q('.te-unpin').addEventListener('click', unpin);
         q('.te-cancel').addEventListener('click', closeEditor);
 
+        q('.te-goLibrary').addEventListener('click', function () { goToPage('trailereditorlibrary'); });
+
         this.loadItem = loadItem;
         this.stopTest = stopTest;
 
@@ -490,11 +506,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         this.stopTest();
     };
 
-    // Item id from the view params, or from the address (…/configurationpage?name=trailereditor&id=123).
+    // The item to open: one handed over by the Trailer Library page, or ?id= in the address.
     function idFromAddress(params) {
-        if (params && params.id) { return params.id; }
+        try {
+            var pending = sessionStorage.getItem('trailerEditorOpenId');
+            if (pending) {
+                sessionStorage.removeItem('trailerEditorOpenId');
+                return pending;
+            }
+        } catch (e) { /* storage may be unavailable */ }
         var m = /[?&]id=([^&#]+)/.exec(window.location.hash || '') || /[?&]id=([^&#]+)/.exec(window.location.search || '');
-        return m ? decodeURIComponent(m[1]) : null;
+        if (m) { return decodeURIComponent(m[1]); }
+        return params && params.id ? params.id : null;
     }
 
     View.prototype.onResume = function (options) {

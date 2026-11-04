@@ -183,7 +183,7 @@ Example:
 ```sh
 curl -X POST -G "http://localhost:8096/emby/TrailerEditor/Items/12345" \
   --data-urlencode "api_key=YOUR_KEY" \
-  --data-urlencode "Urls=https://youtu.be/dQw4w9WgXcQ" \
+  --data-urlencode "Urls=https://www.youtube.com/watch?v=sF7HxngbWLM" \
   --data-urlencode "Pin=true"
 ```
 

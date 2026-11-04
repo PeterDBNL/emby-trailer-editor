@@ -89,10 +89,10 @@ public class YouTubeCheckerTests
     }
 
     [Theory]
-    [InlineData("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ")]
-    [InlineData("Trailer https://youtu.be/dQw4w9WgXcQ?t=3", "dQw4w9WgXcQ")]
-    [InlineData("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ")]
-    [InlineData("https://youtube.com/watch?feature=x&v=dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("https://www.youtube.com/watch?v=sF7HxngbWLM", "sF7HxngbWLM")]
+    [InlineData("Trailer https://youtu.be/sF7HxngbWLM?t=3", "sF7HxngbWLM")]
+    [InlineData("https://www.youtube-nocookie.com/embed/sF7HxngbWLM", "sF7HxngbWLM")]
+    [InlineData("https://youtube.com/watch?feature=x&v=sF7HxngbWLM", "sF7HxngbWLM")]
     [InlineData("/media/movies/Movie (2001).mkv", null)]
     [InlineData(null, null)]
     public void FindVideoIdInAnyText(string text, string expected)

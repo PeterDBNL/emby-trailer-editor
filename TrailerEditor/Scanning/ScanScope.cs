@@ -20,10 +20,16 @@ namespace TrailerEditor.Scanning
         /// <summary>Last letter of the range: "#" or "A".."Z".</summary>
         public string To { get; }
 
+        /// <summary>Only titles added (Emby's "date added") in the last this many days; 0 = any time.</summary>
+        public int AddedWithinDays { get; }
+
+        public const int MaxAddedWithinDays = 3650;
+
         public static ScanScope All { get; } = new ScanScope(null, null, null);
 
-        public ScanScope(string types, string from, string to)
+        public ScanScope(string types, string from, string to, int? addedWithinDays = null)
         {
+            AddedWithinDays = Math.Max(0, Math.Min(MaxAddedWithinDays, addedWithinDays ?? 0));
             var t = (types ?? string.Empty).Trim();
             Types = string.Equals(t, MovieType, StringComparison.OrdinalIgnoreCase) ? MovieType
                 : string.Equals(t, SeriesType, StringComparison.OrdinalIgnoreCase) ? SeriesType
@@ -43,13 +49,19 @@ namespace TrailerEditor.Scanning
         }
 
         /// <summary>The scope a stored scan used. Results from older versions have none, which means everything.</summary>
-        public static ScanScope Of(ScanResults results) => new ScanScope(results.ScopeTypes, results.ScopeFrom, results.ScopeTo);
+        public static ScanScope Of(ScanResults results) => new ScanScope(results.ScopeTypes, results.ScopeFrom, results.ScopeTo, results.ScopeAddedWithinDays);
 
         public bool AllTypes => Types.Length == 0;
 
         public bool AllLetters => From == "#" && To == "Z";
 
-        public bool IsEverything => AllTypes && AllLetters;
+        public bool DateLimited => AddedWithinDays > 0;
+
+        public bool IsEverything => AllTypes && AllLetters && !DateLimited;
+
+        /// <summary>True if a title added at addedUtc is inside the date limit, counted back from referenceUtc. Unknown dates never match a date limit.</summary>
+        public bool MatchesDate(DateTime? addedUtc, DateTime referenceUtc) =>
+            !DateLimited || (addedUtc != null && addedUtc.Value >= referenceUtc.AddDays(-AddedWithinDays));
 
         /// <summary>"A" for A-Z and "#" for everything else, from a title's sort name (or name).</summary>
         public static string LetterOf(string sortName, string name)
@@ -88,6 +100,11 @@ namespace TrailerEditor.Scanning
             if (!AllLetters)
             {
                 parts.Add(From == To ? From : From + "–" + To);
+            }
+
+            if (DateLimited)
+            {
+                parts.Add(AddedWithinDays == 1 ? "added in the last day" : "added in the last " + AddedWithinDays + " days");
             }
 
             return parts.Count == 0 ? null : string.Join(", ", parts);

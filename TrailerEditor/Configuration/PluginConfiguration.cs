@@ -44,6 +44,9 @@ namespace TrailerEditor.Configuration
         /// <summary>Hour of the day (0-23) for automatic scans.</summary>
         public int ScanScheduleHour { get; set; } = 3;
 
+        /// <summary>Automatic scans only cover titles added in the last this many days; 0 = the whole library.</summary>
+        public int ScanScheduleAddedWithinDays { get; set; } = 0;
+
         /// <summary>Used to update settings saved by older versions. Missing in old files, so it reads as 0.</summary>
         public int ConfigVersion { get; set; }
 

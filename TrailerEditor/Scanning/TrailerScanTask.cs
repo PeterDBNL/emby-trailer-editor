@@ -117,12 +117,18 @@ namespace TrailerEditor.Scanning
             switch (config.ScanSchedule)
             {
                 case "Daily":
-                    return "every day at " + hour;
+                    return "every day at " + hour + Covers(config);
                 case "Weekly":
-                    return "every " + (DayOfWeek)Math.Max(0, Math.Min(6, config.ScanScheduleDay)) + " at " + hour;
+                    return "every " + (DayOfWeek)Math.Max(0, Math.Min(6, config.ScanScheduleDay)) + " at " + hour + Covers(config);
                 default:
                     return null;
             }
+        }
+
+        private static string Covers(Configuration.PluginConfiguration config)
+        {
+            var days = new ScanScope(null, null, null, config.ScanScheduleAddedWithinDays).AddedWithinDays;
+            return days == 0 ? string.Empty : days == 1 ? ", titles added in the last day" : ", titles added in the last " + days + " days";
         }
 
         public async Task Execute(CancellationToken cancellationToken, IProgress<double> progress)
@@ -131,12 +137,14 @@ namespace TrailerEditor.Scanning
             var store = EntryPoint.Store;
             var previous = store.Current;
 
-            // The scope asked for with Scan now; automatic and scheduled runs scan everything.
+            // The scope asked for with Scan now; automatic and scheduled runs scan the whole library, or just recently added titles if the settings say so.
             ScanScope scope;
             lock (StateLock)
             {
                 var fresh = _requestedUtc != null && DateTime.UtcNow - _requestedUtc.Value < TimeSpan.FromMinutes(10);
-                scope = fresh && _pendingScope != null ? _pendingScope : ScanScope.All;
+                scope = fresh && _pendingScope != null
+                    ? _pendingScope
+                    : new ScanScope(null, null, null, config.ScanScheduleAddedWithinDays);
                 _pendingScope = null;
             }
 
@@ -146,8 +154,10 @@ namespace TrailerEditor.Scanning
                 StartedUtc = DateTime.UtcNow,
                 ScopeTypes = scope.Types,
                 ScopeFrom = scope.From,
-                ScopeTo = scope.To
+                ScopeTo = scope.To,
+                ScopeAddedWithinDays = scope.DateLimited ? scope.AddedWithinDays : (int?)null
             };
+            var dateReference = results.StartedUtc.Value;
             var recheckAfter = DateTime.UtcNow.AddDays(-Math.Max(0, config.ScanRecheckDays));
             var cache = previous.LinkCache
                 .Where(c => c.VideoId != null)
@@ -163,7 +173,7 @@ namespace TrailerEditor.Scanning
                 IncludeItemTypes = TrailerManager.SupportedTypes,
                 Recursive = true,
                 IsVirtualItem = false
-            }).Where(i => scope.Matches(i.GetClientTypeName(), LetterOf(i))).ToArray();
+            }).Where(i => scope.Matches(i.GetClientTypeName(), LetterOf(i)) && scope.MatchesDate(AddedUtc(i), dateReference)).ToArray();
 
             results.ItemsTotal = items.Length;
             _logger.Info("Trailer Editor: scanning {0} movies and TV shows{1}", items.Length, scope.IsEverything ? string.Empty : " (" + scope.Describe() + ")");
@@ -253,7 +263,8 @@ namespace TrailerEditor.Scanning
                             ItemName = item.Name,
                             Year = item.ProductionYear,
                             Type = item.GetClientTypeName(),
-                            Letter = LetterOf(item)
+                            Letter = LetterOf(item),
+                            AddedUtc = AddedUtc(item)
                         });
 
                         if (cache.TryGetValue(videoId, out var known) && known.CheckedUtc >= recheckAfter)
@@ -371,14 +382,24 @@ namespace TrailerEditor.Scanning
         /// titles it reached. Entries from older versions have no Letter: they count as outside any
         /// letter range that isn't the full # to Z, so they're kept rather than lost; a finished
         /// scan of everything still replaces them.
+        /// A date-limited run (added in the last N days) is different: which titles belong to
+        /// "recently added" changes over time, so it can't tell which older results it replaces.
+        /// It keeps every earlier entry whose title it didn't scan, finished or not.
         /// </summary>
         private static void Merge(ScanResults results, ScanResults previous, ScanScope scope, HashSet<string> scanned)
         {
             bool Keep(string itemId, string type, string letter) =>
-                !scanned.Contains(itemId) && (!results.Completed || !scope.Matches(type, letter));
+                !scanned.Contains(itemId) && (scope.DateLimited || !results.Completed || !scope.Matches(type, letter));
 
             results.Issues.AddRange(previous.Issues.Where(x => Keep(x.ItemId, x.Type, x.Letter)));
             results.Links.AddRange(previous.Links.Where(x => Keep(x.ItemId, x.Type, x.Letter)));
+        }
+
+        /// <summary>When the title was added to the library (Emby's "date added"), in UTC; null if unknown.</summary>
+        private static DateTime? AddedUtc(BaseItem item)
+        {
+            var created = item.DateCreated;
+            return created == default(DateTimeOffset) ? (DateTime?)null : created.UtcDateTime;
         }
 
         private static string LetterOf(BaseItem item)

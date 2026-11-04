@@ -140,6 +140,9 @@ namespace TrailerEditor.Api
 
         /// <summary>Last letter to scan: # or A to Z. Default Z.</summary>
         public string To { get; set; }
+
+        /// <summary>Only titles added (date added) in the last this many days, 1 to 3650. Empty or 0 for any time.</summary>
+        public int? AddedWithinDays { get; set; }
     }
 
     [Route("/TrailerEditor/Playback/Stop", "POST", Summary = "Stops the browser copyright-block test")]
@@ -250,7 +253,7 @@ namespace TrailerEditor.Api
 
         public object Post(StartScan request)
         {
-            if (TrailerScanTask.TryRequestStart(new ScanScope(request.Types, request.From, request.To)))
+            if (TrailerScanTask.TryRequestStart(new ScanScope(request.Types, request.From, request.To, request.AddedWithinDays)))
             {
                 EntryPoint.Store.SetPlaybackStopped(false);
                 _taskManager.QueueIfNotRunning<TrailerScanTask>();

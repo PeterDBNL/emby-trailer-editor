@@ -223,7 +223,9 @@ namespace TrailerEditor.Scanning
         private IEnumerable<LinkRef> InScope()
         {
             var scope = ScanScope.Of(_results);
-            return _results.Links.Where(l => scope.Matches(l.Type, l.Letter));
+            // A date limit is counted back from when that scan started, so the set doesn't shrink as time passes.
+            var started = _results.StartedUtc ?? DateTime.UtcNow;
+            return _results.Links.Where(l => scope.Matches(l.Type, l.Letter) && scope.MatchesDate(l.AddedUtc, started));
         }
 
         private HashSet<string> ServerErrors() => new HashSet<string>(

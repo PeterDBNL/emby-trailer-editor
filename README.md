@@ -94,7 +94,13 @@ Trailer Editor page. It has:
   Only that part is scanned, and only its results are replaced: results for other titles are
   kept, and a finished scan of a segment also drops titles that are no longer in it. A scan you
   stop only replaces the titles it reached. The copyright-block test covers just the scanned part.
-  Automatic scans always cover everything.
+- **Recently added titles.** The *Added* choice limits a scan to titles added (Emby's "date
+  added") in the last day, 3, 7, 14, 30, 90 or 365 days, or a custom number of days (1-3650). It
+  combines with the type and letter choices. Because "recently added" changes over time, such a
+  scan never removes results of titles it didn't scan, and the copyright-block test covers only
+  the links of titles that were within the date range when the scan started. Under *Settings*,
+  *Automatic scans cover* sets whether scheduled scans check the whole library (the default) or
+  only titles added in the last N days.
 - **Stop scan** stops everything, including the copyright-block test. If that test was
   interrupted, the page shows how many links were tested and a **Continue copyright-block test**
   button; starting a new scan clears the stop.
@@ -145,7 +151,7 @@ All endpoints need an administrator's API key or access token.
 | DELETE | `/emby/TrailerEditor/Items/{Id}/Pin` | Unpin an item |
 | GET | `/emby/TrailerEditor/Pinned?SearchTerm=&StartIndex=0&Limit=50` | List pinned items, one page at a time |
 | GET | `/emby/TrailerEditor/Scan` | Scan status and summary |
-| POST | `/emby/TrailerEditor/Scan?Types=&From=&To=` | Start a library scan. Optional `Types` (`Movie` or `Series`, empty for both), `From` and `To` (`#` or `A`-`Z`, default `#` to `Z`) limit it to part of the library |
+| POST | `/emby/TrailerEditor/Scan?Types=&From=&To=&AddedWithinDays=` | Start a library scan. Optional `Types` (`Movie` or `Series`, empty for both), `From` and `To` (`#` or `A`-`Z`, default `#` to `Z`) and `AddedWithinDays` (1-3650; only titles added in the last that many days) limit it to part of the library |
 | POST | `/emby/TrailerEditor/Scan/Cancel` | Stop a running scan, and the copyright-block test |
 | POST | `/emby/TrailerEditor/Playback/Stop` | Stop the browser copyright-block test |
 | POST | `/emby/TrailerEditor/Playback/Continue` | Let the browser copyright-block test continue |

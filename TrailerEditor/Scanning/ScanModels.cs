@@ -39,6 +39,9 @@ namespace TrailerEditor.Scanning
         public int? Year { get; set; }
         public string Type { get; set; }
         public string Letter { get; set; }
+
+        /// <summary>When the title was added to the library (UTC); null in results from older versions.</summary>
+        public DateTime? AddedUtc { get; set; }
     }
 
     public class CachedLinkResult
@@ -66,6 +69,9 @@ namespace TrailerEditor.Scanning
         /// <summary>First and last letter of the last scan ("#" or A-Z); null in older results (everything).</summary>
         public string ScopeFrom { get; set; }
         public string ScopeTo { get; set; }
+
+        /// <summary>The scan only covered titles added in the last this many days; null or 0 = any time.</summary>
+        public int? ScopeAddedWithinDays { get; set; }
 
         /// <summary>True when the scan, or the copyright-block test that follows it, was stopped by the user.</summary>
         public bool PlaybackStopped { get; set; }

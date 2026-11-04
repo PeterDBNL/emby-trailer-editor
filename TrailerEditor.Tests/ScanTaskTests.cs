@@ -465,4 +465,119 @@ public class ScanTaskTests
         Assert.Equal(1, EntryPoint.Store.GetPlaybackCounts(30).Total);
         Assert.Equal(3, EntryPoint.Store.Current.Links.Count);
     }
+
+    private static Movie Added(long id, string sortName, double daysAgo, params string[] trailers)
+    {
+        var m = Sorted(id, sortName, trailers);
+        m.DateCreated = DateTimeOffset.UtcNow.AddDays(-daysAgo);
+        return m;
+    }
+
+    private ScanResults RunDays(string types, string from, string to, int? days)
+    {
+        Assert.True(TrailerScanTask.TryRequestStart(new ScanScope(types, from, to, days)));
+        return Run();
+    }
+
+    [Fact]
+    public void DateScopeSelectsOnlyRecentTitlesAndCombinesWithTypeAndLetter()
+    {
+        var show = ShowSorted(4, "Apple");
+        show.DateCreated = DateTimeOffset.UtcNow.AddDays(-0.5);
+        _items = new BaseItem[]
+        {
+            Added(1, "Alpha", 2), Added(2, "Bravo", 20), Added(3, "Zulu", 0.5), show, Sorted(5, "Unknown")
+        };
+
+        Assert.Equal(new[] { "Alpha", "Apple", "Zulu" }, Names(RunDays(null, null, null, 7)));
+        Assert.Equal(3, EntryPoint.Store.Current.ItemsTotal);
+        Assert.Equal(7, EntryPoint.Store.Current.ScopeAddedWithinDays);
+        Assert.Equal("added in the last 7 days", ScanScope.Of(EntryPoint.Store.Current).Describe());
+
+        // Earlier results of unscanned titles are kept, so check what this run scanned.
+        Assert.Equal(1, RunDays("Movie", "A", "C", 7).ItemsTotal);
+        Assert.Equal(2, RunDays(null, null, null, 1).ItemsTotal);
+    }
+
+    [Fact]
+    public void DescribeUsesSingularDayAndClampsDays()
+    {
+        Assert.Equal("added in the last day", new ScanScope(null, null, null, 1).Describe());
+        Assert.Equal("Movies, A–C, added in the last 7 days", new ScanScope("Movie", "A", "C", 7).Describe());
+        Assert.Null(new ScanScope(null, null, null, 0).Describe());
+        Assert.Equal(3650, new ScanScope(null, null, null, 99999).AddedWithinDays);
+        Assert.Equal(0, new ScanScope(null, null, null, -4).AddedWithinDays);
+    }
+
+    [Fact]
+    public void DateLimitedScanKeepsOlderTitlesResultsEvenWhenCompleted()
+    {
+        _items = new BaseItem[] { Added(1, "Alpha", 100), Added(2, "Bravo", 100, Ok1) };
+        Run();
+        Assert.Equal(new[] { "Alpha" }, Names(EntryPoint.Store.Current));
+
+        // Alpha is old and not scanned; Charlie is new.
+        _items = new BaseItem[] { Added(1, "Alpha", 100), Added(2, "Bravo", 100, Ok1), Added(3, "Charlie", 1) };
+        var r = RunDays(null, null, null, 7);
+        Assert.True(r.Completed);
+        Assert.Equal(new[] { "Alpha", "Charlie" }, Names(r));
+        Assert.Contains(r.Links, l => l.ItemName == "Bravo");
+
+        // A letter-only completed scan still replaces its segment.
+        _items = new BaseItem[] { Added(2, "Bravo", 100, Ok1), Added(3, "Charlie", 1) };
+        Assert.Equal(new[] { "Charlie" }, Names(RunScope("", "A", "A")).Where(n => n == "Charlie").ToArray());
+        Assert.DoesNotContain("Alpha", Names(EntryPoint.Store.Current));
+    }
+
+    [Fact]
+    public void PlaybackQueueForDateScopeUsesAddedDateRelativeToScanStart()
+    {
+        _items = new BaseItem[] { Added(1, "Alpha", 2, Ok1), Added(2, "Bravo", 20, Ok2) };
+        Run();
+        Assert.Equal(2, EntryPoint.Store.GetPlaybackCounts(30).Total);
+        Assert.All(EntryPoint.Store.Current.Links, l => Assert.NotNull(l.AddedUtc));
+
+        RunDays(null, null, null, 7);
+        Assert.Equal(new[] { "okokokokok1" }, EntryPoint.Store.GetPlaybackQueue(10, 30).Select(q => q.VideoId).ToArray());
+        Assert.Equal(1, EntryPoint.Store.GetPlaybackCounts(30).Total);
+
+        // A link kept from before this version has no date and is left out; one added just before the scan started stays in.
+        var links = EntryPoint.Store.Current.Links;
+        links.Add(new LinkRef { VideoId = "oldoldoldol1", Url = "https://youtu.be/oldoldoldol1", ItemId = "9", ItemName = "Old", Type = "Movie", Letter = "O" });
+        links.First(l => l.VideoId == "okokokokok1").AddedUtc = EntryPoint.Store.Current.StartedUtc.Value.AddDays(-6.9);
+        Assert.Equal(1, EntryPoint.Store.GetPlaybackCounts(30).Total);
+        links.First(l => l.VideoId == "okokokokok1").AddedUtc = EntryPoint.Store.Current.StartedUtc.Value.AddDays(-7.1);
+        Assert.Equal(0, EntryPoint.Store.GetPlaybackCounts(30).Total);
+    }
+
+    [Fact]
+    public void ScheduledRunUsesTheConfiguredAddedWithinDays()
+    {
+        var config = Plugin.Instance.Configuration;
+        _items = new BaseItem[] { Added(1, "Alpha", 1), Added(2, "Bravo", 10) };
+        try
+        {
+            config.ScanScheduleAddedWithinDays = 3;
+            var r = Run();
+            Assert.Equal(new[] { "Alpha" }, Names(r));
+            Assert.Equal(3, r.ScopeAddedWithinDays);
+
+            // A pending manual scope wins over the setting.
+            Assert.Equal(2, RunDays(null, null, null, null).ItemsTotal);
+
+            config.ScanSchedule = "Daily";
+            config.ScanScheduleHour = 3;
+            Assert.Equal("every day at 03:00, titles added in the last 3 days", TrailerScanTask.Describe(config));
+            config.ScanScheduleAddedWithinDays = 1;
+            Assert.Equal("every day at 03:00, titles added in the last day", TrailerScanTask.Describe(config));
+            config.ScanScheduleAddedWithinDays = 0;
+            Assert.Equal("every day at 03:00", TrailerScanTask.Describe(config));
+            Assert.Equal(2, Run().ItemsTotal);
+        }
+        finally
+        {
+            config.ScanScheduleAddedWithinDays = 0;
+            config.ScanSchedule = "Off";
+        }
+    }
 }

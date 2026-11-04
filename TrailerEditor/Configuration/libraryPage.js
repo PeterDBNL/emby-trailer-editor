@@ -13,7 +13,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     var settingNames = ['PinEditedTrailers', 'ScanReportNoTrailers', 'ScanIgnoreItemsWithLocalTrailers',
         'ScanCheckLinks', 'ScanCheckAgeRestriction', 'ScanBrowserPlaybackTest', 'ScanLearnFromPlayback',
-        'ScanRequestDelayMs', 'ScanRecheckDays', 'ScanSchedule', 'ScanScheduleDay', 'ScanScheduleHour'];
+        'ScanRequestDelayMs', 'ScanRecheckDays', 'ScanSchedule', 'ScanScheduleDay', 'ScanScheduleHour',
+        'ScanScheduleAddedWithinDays'];
     var textSettings = { ScanSchedule: true };
 
     function escapeHtml(value) {
@@ -295,8 +296,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             var mode = q('.tl-ScanSchedule').value;
             q('.tl-dayContainer').style.display = mode === 'Weekly' ? '' : 'none';
             q('.tl-hourContainer').style.display = mode === 'Off' ? 'none' : '';
+            q('.tl-coverContainer').style.display = mode === 'Off' ? 'none' : '';
+            q('.tl-coverDaysContainer').style.display = mode !== 'Off' && q('.tl-scheduleCovers').value === 'Recent' ? '' : 'none';
         }
         q('.tl-ScanSchedule').addEventListener('change', updateScheduleFields);
+        q('.tl-scheduleCovers').addEventListener('change', function () {
+            var days = q('.tl-ScanScheduleAddedWithinDays');
+            if (this.value === 'Recent' && !(parseInt(days.value, 10) > 0)) { days.value = '7'; }
+            updateScheduleFields();
+        });
         q('.tl-issueSearch').addEventListener('input', debounce(function () { issues.reset(); }, 400));
         q('.tl-pinnedSearch').addEventListener('input', debounce(function () { pinned.reset(); }, 400));
 
@@ -325,7 +333,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 } else if (s.State === 'Cancelling') {
                     status.textContent = 'Stopping the scan…';
                 } else {
-                    status.textContent = 'Scanning' + (s.ScopeText ? ' ' + s.ScopeText.replace(', ', ' ') : '') + '… ' + pct + '%' +
+                    status.textContent = 'Scanning' + (s.ScopeText ? ' ' + s.ScopeText.replace(/, /g, ' ') : '') + '… ' + pct + '%' +
                         (twoSteps ? ' · step 1 of 2: checking titles' : '') +
                         (s.TotalToScan ? ' (' + number(s.ScannedSoFar) + ' of ' + number(s.TotalToScan) + (twoSteps ? '' : ' titles') + ')' : '') +
                         ' · ' + problemsText(s.ProblemsSoFar) + ' found so far';
@@ -334,7 +342,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 bar.firstElementChild.style.width = pct + '%';
             } else if (step2) {
                 var pct2 = Math.round(50 + 50 * s.PlaybackDone / s.PlaybackTotal);
-                status.textContent = 'Scanning' + (s.ScopeText ? ' ' + s.ScopeText.replace(', ', ' ') : '') + '… ' + pct2 + '% · step 2 of 2: copyright-block test (' +
+                status.textContent = 'Scanning' + (s.ScopeText ? ' ' + s.ScopeText.replace(/, /g, ' ') : '') + '… ' + pct2 + '% · step 2 of 2: copyright-block test (' +
                     number(s.PlaybackDone) + ' of ' + number(s.PlaybackTotal) + ' links) · ' +
                     problemsText(s.IssueCount) + ' found so far · ' + (runner.state || 'starting') +
                     '. Keep this page open and visible.';
@@ -444,7 +452,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             api('POST', 'TrailerEditor/Scan', {
                 Types: q('.tl-scopeTypes').value,
                 From: q('.tl-scopeFrom').value,
-                To: q('.tl-scopeTo').value
+                To: q('.tl-scopeTo').value,
+                AddedWithinDays: addedDays() || undefined
             }).then(function (s) {
                 button.disabled = false;
                 renderStatus(s);
@@ -473,10 +482,21 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         // Remember what to scan.
         var scopeKey = 'trailerEditorScanScope';
+        // Days for "Added", or 0 for any time. Custom uses the number box (1 to 3650).
+        function addedDays() {
+            var v = q('.tl-scopeAdded').value;
+            if (v === 'custom') { v = q('.tl-scopeCustomDays').value; }
+            var n = parseInt(v, 10);
+            return isNaN(n) || n < 1 ? 0 : Math.min(3650, n);
+        }
+        function updateCustomDays() {
+            q('.tl-customDaysContainer').style.display = q('.tl-scopeAdded').value === 'custom' ? '' : 'none';
+        }
         function saveScope() {
             try {
                 localStorage.setItem(scopeKey, JSON.stringify({
-                    types: q('.tl-scopeTypes').value, from: q('.tl-scopeFrom').value, to: q('.tl-scopeTo').value
+                    types: q('.tl-scopeTypes').value, from: q('.tl-scopeFrom').value, to: q('.tl-scopeTo').value,
+                    added: q('.tl-scopeAdded').value, customDays: q('.tl-scopeCustomDays').value
                 }));
             } catch (e) { /* storage may be unavailable */ }
         }
@@ -484,15 +504,23 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             q('.tl-scopeTypes').value = '';
             q('.tl-scopeFrom').value = '#';
             q('.tl-scopeTo').value = 'Z';
+            q('.tl-scopeAdded').value = '';
+            q('.tl-scopeCustomDays').value = '14';
             try {
                 var saved = JSON.parse(localStorage.getItem(scopeKey) || 'null');
                 if (saved) {
                     q('.tl-scopeTypes').value = saved.types || '';
                     q('.tl-scopeFrom').value = saved.from || '#';
                     q('.tl-scopeTo').value = saved.to || 'Z';
+                    q('.tl-scopeAdded').value = saved.added || '';
+                    if (q('.tl-scopeAdded').value !== (saved.added || '')) { q('.tl-scopeAdded').value = ''; }
+                    q('.tl-scopeCustomDays').value = saved.customDays || '14';
                 }
             } catch (e) { /* ignore a bad or missing value */ }
+            updateCustomDays();
         })();
+        q('.tl-scopeAdded').addEventListener('change', function () { updateCustomDays(); saveScope(); });
+        q('.tl-scopeCustomDays').addEventListener('input', saveScope);
         ['.tl-scopeTypes', '.tl-scopeFrom', '.tl-scopeTo'].forEach(function (sel) { q(sel).addEventListener('change', saveScope); });
 
         function loadSettings() {
@@ -502,6 +530,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     if (el.type === 'checkbox') { el.checked = !!config[name]; } else { el.value = String(config[name] == null ? '' : config[name]); }
                 });
                 if (!q('.tl-ScanSchedule').value) { q('.tl-ScanSchedule').value = 'Off'; }
+                var coverDays = parseInt(q('.tl-ScanScheduleAddedWithinDays').value, 10);
+                q('.tl-scheduleCovers').value = coverDays > 0 ? 'Recent' : 'All';
+                if (!(coverDays > 0)) { q('.tl-ScanScheduleAddedWithinDays').value = '7'; }
                 updateScheduleFields();
             });
         }
@@ -511,7 +542,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                 settingNames.forEach(function (name) {
                     var el = q('.tl-' + name);
-                    if (el.type === 'checkbox') {
+                    if (name === 'ScanScheduleAddedWithinDays') {
+                        var d = parseInt(el.value, 10);
+                        config[name] = q('.tl-scheduleCovers').value === 'Recent' && d > 0 ? Math.min(3650, d) : 0;
+                    } else if (el.type === 'checkbox') {
                         config[name] = el.checked;
                     } else if (textSettings[name]) {
                         config[name] = el.value;

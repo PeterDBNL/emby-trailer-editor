@@ -41,6 +41,8 @@
                     #trailerLibraryPage .tl-scope .tl-inline { gap: .6em; }
                     #trailerLibraryPage .tl-scope .selectContainer { flex: 0 1 8em; margin-bottom: 0; }
                     #trailerLibraryPage .tl-scope .selectContainer:first-child { flex-basis: 12em; }
+                    #trailerLibraryPage .tl-scope .tl-addedContainer { flex-basis: 11em; }
+                    #trailerLibraryPage .tl-customDaysContainer { flex: 0 1 9em; margin-bottom: 0; }
                     #trailerLibraryPage .tl-issue { font-size: .9em; margin-top: .15em; }
                     #trailerLibraryPage .tl-kind-Unplayable, #trailerLibraryPage .tl-kind-InvalidLink { color: #e05252; }
                     #trailerLibraryPage .tl-kind-DuplicateLink { color: #e0a030; }
@@ -136,6 +138,22 @@
                                     <option value="Z">Z</option>
                                 </select>
                             </div>
+                            <div class="selectContainer tl-addedContainer">
+                                <select is="emby-select" class="tl-scopeAdded" label="Added">
+                                    <option value="">Any time</option>
+                                    <option value="1">Last day</option>
+                                    <option value="3">Last 3 days</option>
+                                    <option value="7">Last 7 days</option>
+                                    <option value="14">Last 14 days</option>
+                                    <option value="30">Last 30 days</option>
+                                    <option value="90">Last 90 days</option>
+                                    <option value="365">Last 365 days</option>
+                                    <option value="custom">Custom…</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer tl-customDaysContainer" style="display:none;">
+                                <input is="emby-input" type="number" min="1" max="3650" step="1" class="tl-scopeCustomDays" label="Days" />
+                            </div>
                         </div>
                     </div>
                     <div class="tl-buttons">
@@ -213,6 +231,15 @@
                             </div>
                             <div class="selectContainer tl-hourContainer">
                                 <select is="emby-select" class="tl-ScanScheduleHour" label="Time"></select>
+                            </div>
+                            <div class="selectContainer tl-coverContainer">
+                                <select is="emby-select" class="tl-scheduleCovers" label="Automatic scans cover">
+                                    <option value="All">Whole library</option>
+                                    <option value="Recent">Titles added in the last N days</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer tl-coverDaysContainer" style="display:none;">
+                                <input is="emby-input" type="number" min="1" max="3650" step="1" class="tl-ScanScheduleAddedWithinDays" label="Days" />
                             </div>
                         </div>
                         <div class="checkboxContainer">

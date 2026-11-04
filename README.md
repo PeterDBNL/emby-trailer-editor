@@ -111,7 +111,8 @@ Only a browser can detect this. With *Test playback in this browser to catch cop
 ticked under Settings, the Trailer Library page plays each scanned link for a moment, muted, in a
 hidden YouTube player. **This only runs while the Trailer Library page stays open and visible
 in a browser window.** If you close it, switch tabs or the computer sleeps, testing pauses and
-continues where it left off the next time you open the page. Blocked links appear in the scan
+continues where it left off the next time you open the page. With this test on, the scan counts as
+finished (and the problem counts appear) only after the test is done; the progress bar covers both steps. Blocked links appear in the scan
 results as *Won't play*. Links that already failed the server check, or were tested within the
 re-check period, are skipped.
 

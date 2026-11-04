@@ -290,24 +290,40 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         function renderStatus(s) {
             lastState = s;
+            // Step 1 is the server scan. Step 2 (only when the copyright-block test is on)
+            // is the browser test. The scan counts as finished only when both are done.
             var running = s.State === 'Running' || s.State === 'Cancelling' || s.State === 'Starting';
+            var twoSteps = !!s.BrowserPlaybackTest;
+            var step2 = !running && twoSteps && !!s.HasResults && s.PlaybackDone < s.PlaybackTotal;
+            var checking = running || step2;
             var status = q('.tl-status');
             var bar = q('.tl-bar');
 
+            function problemsText(n) { return n === 1 ? '1 problem' : number(n) + ' problems'; }
+
             if (running) {
                 var pct = Math.round(s.Progress || 0);
+                if (twoSteps) { pct = Math.round(pct / 2); }
                 if (s.State === 'Starting') {
                     status.textContent = 'Starting the scan…';
                 } else if (s.State === 'Cancelling') {
                     status.textContent = 'Stopping the scan…';
                 } else {
-                    var found = s.ProblemsSoFar === 1 ? '1 problem' : number(s.ProblemsSoFar) + ' problems';
                     status.textContent = 'Scanning… ' + pct + '%' +
-                        (s.TotalToScan ? ' (' + number(s.ScannedSoFar) + ' of ' + number(s.TotalToScan) + ' titles)' : '') +
-                        ' · ' + found + ' found so far';
+                        (twoSteps ? ' · step 1 of 2: checking titles' : '') +
+                        (s.TotalToScan ? ' (' + number(s.ScannedSoFar) + ' of ' + number(s.TotalToScan) + (twoSteps ? '' : ' titles') + ')' : '') +
+                        ' · ' + problemsText(s.ProblemsSoFar) + ' found so far';
                 }
                 bar.style.display = '';
                 bar.firstElementChild.style.width = pct + '%';
+            } else if (step2) {
+                var pct2 = Math.round(50 + 50 * s.PlaybackDone / s.PlaybackTotal);
+                status.textContent = 'Scanning… ' + pct2 + '% · step 2 of 2: copyright-block test (' +
+                    number(s.PlaybackDone) + ' of ' + number(s.PlaybackTotal) + ' links) · ' +
+                    problemsText(s.IssueCount) + ' found so far · ' + (runner.state || 'starting') +
+                    '. Keep this page open and visible.';
+                bar.style.display = '';
+                bar.firstElementChild.style.width = pct2 + '%';
             } else {
                 bar.style.display = 'none';
                 if (!s.HasResults) {
@@ -323,11 +339,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             var note = q('.tl-note');
             note.textContent = s.Note || '';
-            note.style.display = s.Note && !running ? '' : 'none';
+            note.style.display = s.Note && !checking ? '' : 'none';
 
-            // Problem counts only once a scan has finished.
+            // Problem counts only once everything has finished.
             var chips = [];
-            if (s.HasResults && !running) {
+            if (s.HasResults && !checking) {
                 chips.push(['', number(s.IssueCount) + ' problems']);
                 if (s.UnplayableCount) { chips.push(['Unplayable', number(s.UnplayableCount) + " won't play"]); }
                 if (s.NoTrailersCount) { chips.push(['NoTrailers', number(s.NoTrailersCount) + ' without trailers']); }
@@ -340,13 +356,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             q('.tl-issuesCount').textContent = running
                 ? (s.HasResults ? '(' + number(s.IssueCount) + ' from the last scan, new scan running)' : '(scan running)')
+                : step2 ? '(' + number(s.IssueCount) + ' so far, copyright-block test running)'
                 : (s.HasResults ? '(' + number(s.IssueCount) + ')' : '');
             q('.tl-pinnedCount').textContent = '(' + number(s.PinnedCount) + ')';
             q('.tl-scan').style.display = running ? 'none' : '';
             q('.tl-cancel').style.display = s.State === 'Running' ? '' : 'none';
 
             // Refresh the open lists when a scan finishes.
-            if (lastIssueCount !== null && !running && (s.IssueCount !== lastIssueCount || s.FinishedUtc !== self._lastFinished)) {
+            if (lastIssueCount !== null && !checking && (s.IssueCount !== lastIssueCount || s.FinishedUtc !== self._lastFinished)) {
                 issues.refresh();
             }
             lastIssueCount = s.IssueCount;
@@ -354,6 +371,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             renderPlayback(s);
             renderWarnings(s);
+            // Step 1 changes quickly; step 2 reports back after every tested link.
             schedulePoll(running ? 2000 : 15000);
         }
 
@@ -463,15 +481,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 box.textContent = 'Copyright-block test: off. Turn it on under Settings to test every link in this browser.';
                 return;
             }
-            if (!s.HasResults) {
-                box.textContent = 'Copyright-block test: waiting for the first library scan.';
-                return;
-            }
-            var progress = number(s.PlaybackDone) + ' of ' + number(s.PlaybackTotal) + ' links tested' +
-                (s.PlaybackBlocked ? ', ' + number(s.PlaybackBlocked) + ' blocked' : '');
-            var state = s.PlaybackDone >= s.PlaybackTotal ? 'all done' : (runner.state || 'starting…');
-            box.textContent = 'Copyright-block test: ' + progress + ' · ' + state + '. Keep this page open and visible.';
-            startRunner();
+            // Progress while testing is shown in the main scan status above.
+            box.textContent = s.HasResults ? '' : 'Copyright-block test: waiting for the first library scan.';
+            if (s.HasResults) { startRunner(); }
         }
 
         function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
@@ -506,7 +518,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                                 runner.unknownInARow = r.status === 'unknown' ? runner.unknownInARow + 1 : 0;
                                 return api('POST', 'TrailerEditor/Playback/Result',
                                     { VideoId: entry.VideoId, Status: r.status, Message: r.text, Source: 'browser' })
-                                    .then(function (s) { lastState = s; renderPlayback(s); }, function () { /* keep going */ });
+                                    .then(function (s) { renderStatus(s); }, function () { /* keep going */ });
                             });
                         });
                     }, Promise.resolve()).then(function () {

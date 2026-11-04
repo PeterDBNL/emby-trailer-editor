@@ -26,6 +26,8 @@ namespace TrailerEditor
 
         public static TrailerManager Manager { get; private set; }
 
+        public static YouTubeChecker Checker { get; } = new YouTubeChecker();
+
         public void Run()
         {
             _libraryManager.ItemUpdated += OnItemUpdated;

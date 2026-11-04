@@ -77,7 +77,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 '<img class="te-thumb" alt="" />' +
                 '<div class="inputContainer"><input is="emby-input" type="text" class="te-url" label="Trailer link" /></div>' +
                 '<button is="emby-button" type="button" class="raised te-open"><span>Open</span></button>' +
-                '<button is="emby-button" type="button" class="raised te-remove"><span>Remove</span></button>';
+                '<button is="emby-button" type="button" class="raised te-remove"><span>Remove</span></button>' +
+                '<div class="te-check"></div>';
             q('.te-links').appendChild(row);
 
             var input = row.querySelector('.te-url');
@@ -92,9 +93,41 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                     thumb.style.visibility = 'hidden';
                 }
             }
+            var check = row.querySelector('.te-check');
+            var checkTimer = null;
+            var checkSeq = 0;
+
+            function setCheck(status, text) {
+                row.setAttribute('data-check', status || '');
+                check.className = 'te-check' + (status ? ' te-check-' + status : '');
+                check.textContent = text || '';
+            }
+
+            function runCheck() {
+                var value = input.value.trim();
+                var seq = ++checkSeq;
+                if (!value) { setCheck('', ''); return; }
+                setCheck('pending', 'Checking whether this plays in Emby…');
+                api('GET', 'TrailerEditor/Check', { Url: value }).then(function (r) {
+                    if (seq !== checkSeq) { return; }
+                    var title = r.Title ? '"' + r.Title + '"' + (r.Channel ? ' by ' + r.Channel : '') + ': ' : '';
+                    var icon = r.Status === 'ok' ? '✓ ' : r.Status === 'error' ? '✗ ' : '? ';
+                    setCheck(r.Status, icon + title + (r.Message || ''));
+                }, function () {
+                    if (seq !== checkSeq) { return; }
+                    setCheck('unknown', '? Couldn\'t check this link.');
+                });
+            }
+
             input.value = url || '';
-            input.addEventListener('input', updateThumb);
+            input.addEventListener('input', function () {
+                updateThumb();
+                clearTimeout(checkTimer);
+                setCheck('', '');
+                checkTimer = setTimeout(runCheck, 700);
+            });
             updateThumb();
+            runCheck();
 
             row.querySelector('.te-remove').addEventListener('click', function () { row.parentNode.removeChild(row); });
             row.querySelector('.te-open').addEventListener('click', function () {
@@ -160,6 +193,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             if (!current) { return; }
             var urls = Array.prototype.map.call(view.querySelectorAll('.te-url'), function (i) { return i.value.trim(); })
                 .filter(function (v) { return v; });
+            var bad = Array.prototype.filter.call(view.querySelectorAll('.te-link'), function (row) {
+                return row.getAttribute('data-check') === 'error' && row.querySelector('.te-url').value.trim();
+            }).length;
+            if (bad && !window.confirm(bad === 1
+                ? 'One link probably won\'t play in Emby (see the note under it). Save anyway?'
+                : bad + ' links probably won\'t play in Emby (see the notes under them). Save anyway?')) {
+                return;
+            }
             loading.show();
             api('POST', 'TrailerEditor/Items/' + encodeURIComponent(current.Id), { Urls: urls.join('\n'), Pin: q('.te-pin').checked })
                 .then(function (item) {

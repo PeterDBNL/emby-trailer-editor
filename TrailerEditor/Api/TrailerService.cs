@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -62,6 +64,13 @@ namespace TrailerEditor.Api
         public bool? Pin { get; set; }
 
         public Stream RequestStream { get; set; }
+    }
+
+    [Route("/TrailerEditor/Check", "GET", Summary = "Checks whether a trailer link can play in Emby")]
+    public class CheckLink : IReturn<LinkCheckResult>
+    {
+        [ApiMember(Name = "Url", IsRequired = true, DataType = "string", ParameterType = "query")]
+        public string Url { get; set; }
     }
 
     [Route("/TrailerEditor/Items/{Id}/Pin", "DELETE", Summary = "Stops pinning the trailer links of an item (links stay as they are)")]
@@ -183,6 +192,11 @@ namespace TrailerEditor.Api
                 // Emby may already have consumed or closed the body.
                 return string.Empty;
             }
+        }
+
+        public async Task<object> Get(CheckLink request)
+        {
+            return await EntryPoint.Checker.CheckAsync(request.Url, CancellationToken.None).ConfigureAwait(false);
         }
 
         public object Delete(UnpinItem request)

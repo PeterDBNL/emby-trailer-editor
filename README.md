@@ -11,6 +11,7 @@ Emby's built-in metadata editor doesn't let you change these links. This plugin 
 - paste full YouTube links (`youtube.com/watch?v=…`, `youtu.be/…`, `/embed/…`, `/shorts/…`)
   or just the 11-character video id; they are all saved as a standard
   `https://www.youtube.com/watch?v=ID` link that Emby apps can play
+- see right away whether each YouTube link will actually **play in Emby** (see below)
 - **pin** your links so a metadata refresh (e.g. "Replace all metadata") can't overwrite them
 
 Requires Emby Server **4.8 or newer**.
@@ -37,6 +38,23 @@ Requires Emby Server **4.8 or newer**.
 Each link shows a YouTube thumbnail preview and an **Open** button so you can check it.
 Leave every link box empty and save to remove all trailers from the item.
 
+### Link check
+
+Emby plays YouTube trailers through YouTube's embedded player, and YouTube refuses to play
+some videos there. Emby then shows *"No compatible streams are currently available"*.
+The editor checks every YouTube link (your Emby server asks YouTube) and shows a note
+under it:
+
+- ✓ **Should play in Emby** – with the video's title and channel
+- ✗ **Won't play** – the uploader has turned off embedding, the video is age-restricted,
+  private, deleted or otherwise blocked. Pick a different upload of the trailer.
+- ? **Couldn't check** – e.g. the server can't reach YouTube, or it isn't a YouTube link
+
+Saving a link marked ✗ asks for confirmation first, but is still allowed.
+The embedding check uses YouTube's official oEmbed service and is reliable. The
+age-restriction check reads YouTube's public video page; if YouTube changes that page it
+may stop detecting age restrictions, though nothing else breaks. Results are cached for an hour.
+
 ### Pinning
 
 Emby only stores one list of trailer links per item and has no "lock" for it, so a full
@@ -58,6 +76,7 @@ All endpoints need an administrator's API key or access token.
 | GET | `/emby/TrailerEditor/Search?SearchTerm=name&Limit=30` | Find movies / TV shows |
 | GET | `/emby/TrailerEditor/Items/{Id}` | Get an item's trailer links |
 | POST | `/emby/TrailerEditor/Items/{Id}?Urls=…&Pin=true` | Replace the links. `Urls` is one link per line (URL-encoded); leave it empty to remove all trailers |
+| GET | `/emby/TrailerEditor/Check?Url=…` | Check whether a link will play in Emby |
 | DELETE | `/emby/TrailerEditor/Items/{Id}/Pin` | Unpin an item |
 | GET | `/emby/TrailerEditor/Pinned` | List pinned items |
 

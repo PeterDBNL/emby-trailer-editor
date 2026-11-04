@@ -70,3 +70,29 @@ jobs:
         with:
           files: TrailerEditor.zip
           generate_release_notes: true
+
+      # Pushing a new plugin version to the default branch publishes it as a release
+      # automatically (tag vX.Y.Z is created by the release step), unless that release exists.
+      - name: Check for a new version (default branch only)
+        id: newversion
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          version="$(sed -n 's:.*<AssemblyVersion>\([0-9]*\.[0-9]*\.[0-9]*\)\.[0-9]*</AssemblyVersion>.*:\1:p' TrailerEditor/TrailerEditor.csproj | head -n1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+            echo "Release v$version already exists; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version $version: publishing release v$version."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish GitHub Release (new version on default branch)
+        if: steps.newversion.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.newversion.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Trailer Editor ${{ steps.newversion.outputs.version }}
+          files: TrailerEditor.zip
+          generate_release_notes: true

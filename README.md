@@ -197,10 +197,11 @@ dotnet build TrailerEditor/TrailerEditor.csproj -c Release
 # output: TrailerEditor/bin/Release/netstandard2.0/TrailerEditor.dll
 ```
 
-**Releases.** Set the version in `TrailerEditor/TrailerEditor.csproj`, commit, then push a tag
-that matches it, e.g. `v1.9.1` for version `1.9.1.0`. GitHub Actions builds, tests and publishes
-a release with `TrailerEditor.zip` attached. Every other build uploads the same zip as a
-workflow artifact.
+**Releases.** Bump the version in `TrailerEditor/TrailerEditor.csproj` and push to the default
+branch. GitHub Actions builds and tests it and, if there's no release for that version yet,
+publishes release `vX.Y.Z` with `TrailerEditor.zip` attached. Pushing a matching tag (e.g.
+`v1.9.1` for version `1.9.1.0`) does the same. Every other build uploads the zip as a workflow
+artifact.
 
 ## Notes and limitations
 

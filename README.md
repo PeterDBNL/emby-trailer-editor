@@ -2,24 +2,29 @@
 
 ![Trailer Editor](TrailerEditor/thumb.jpg)
 
-An Emby Server plugin that lets you edit the **trailer links** stored in the metadata of
-movies and TV shows, for example to swap a wrong or dead YouTube trailer for the right one.
+[![Latest release](https://img.shields.io/github/v/release/PeterDBNL/emby-trailer-editor)](https://github.com/PeterDBNL/emby-trailer-editor/releases/latest)
+[![Build](https://github.com/PeterDBNL/emby-trailer-editor/actions/workflows/build.yml/badge.svg)](https://github.com/PeterDBNL/emby-trailer-editor/actions/workflows/build.yml)
 
-Emby's built-in metadata editor doesn't let you change these links. This plugin adds a
-**Trailer Editor** page to the server dashboard where you can:
+An Emby Server plugin that lets you fix the **trailer links** of your movies and TV shows, for
+example to swap a wrong or dead YouTube trailer for the right one, and finds the broken ones for you.
 
-- search for a movie or TV show by name
-- add, change or remove its trailer links
-- paste full YouTube links (`youtube.com/watch?v=…`, `youtu.be/…`, `/embed/…`, `/shorts/…`)
-  or just the 11-character video id; they are all saved as a standard
-  `https://www.youtube.com/watch?v=ID` link that Emby apps can play
-- see right away whether each YouTube link will actually **play in Emby** (see below)
-- open a **YouTube search** for the title with one click
-- **pin** your links so a metadata refresh (e.g. "Replace all metadata") can't overwrite them
-- **scan your whole library** for titles without trailers and trailer links that are broken
-  or won't play
+### [Download the latest version](https://github.com/PeterDBNL/emby-trailer-editor/releases/latest/download/TrailerEditor.zip)
 
-Requires Emby Server **4.8 or newer**.
+All versions: [Releases](https://github.com/PeterDBNL/emby-trailer-editor/releases). See [Install](#install) below.
+
+## Features
+
+- Add, change or remove the trailer links of any movie or TV show. Emby's own metadata editor can't do this.
+- Paste any YouTube link (`youtube.com/watch?v=...`, `youtu.be/...`, `/embed/...`, `/shorts/...`)
+  or just the 11-character video id. It is saved as a standard `https://www.youtube.com/watch?v=ID` link.
+- Every link is checked automatically to see whether it will really play in Emby. The **Test**
+  button plays it in a visible player, and **Search YouTube** finds a replacement quickly.
+- **Pin** your links so a metadata refresh (e.g. "Replace all metadata") can't overwrite them.
+- **Library scan** for titles without trailers and for trailer links that are broken or won't play.
+  Scan everything, a part of the library (movies or TV shows, a range of letters) or only recently
+  added titles, now or on a daily or weekly schedule.
+- Optional copyright-block test in your browser, which catches videos the server can't judge.
+- Learns from trailers that play in Emby, so fewer links need testing.
 
 ## Screenshots
 
@@ -37,130 +42,118 @@ added), with live progress for both steps.
 
 ![Scan results](docs/screenshots/scan-results.png)
 
+## Requirements
+
+Emby Server **4.8 or newer** (tested on 4.10.2 in Docker).
+
 ## Install
 
-1. Get `TrailerEditor.dll`:
-   - from the **Actions** tab of this repo (latest "Build" run → *Artifacts* → `TrailerEditor`), or
-   - from a GitHub release, or
-   - build it yourself (see below).
-2. Copy `TrailerEditor.dll` into the Emby `plugins` folder:
+1. [Download `TrailerEditor.zip`](https://github.com/PeterDBNL/emby-trailer-editor/releases/latest/download/TrailerEditor.zip)
+   and unzip it.
+2. Copy `TrailerEditor.dll` into Emby's `plugins` folder:
+   - Docker: `/config/plugins` inside the container
    - Linux: `/var/lib/emby/plugins`
    - Windows: `%AppData%\Emby-Server\programdata\plugins`
-   - Docker: `/config/plugins` inside the container
    - Synology/other NAS: the `plugins` folder inside Emby's data folder
-3. Restart Emby Server.
+3. On Linux and Docker, give the file the same owner as the other plugins in that folder
+   (for example `chown --reference=<another plugin>.dll TrailerEditor.dll`).
+4. Restart Emby Server.
+5. Open **Plugins** in the Emby dashboard and check that *Trailer Editor* is listed.
 
-## Use
+To update, repeat the same steps with the new download and replace the old file.
+
+## Using it
+
+### Trailer Editor
 
 1. Open the Emby dashboard (as an administrator).
-2. Click **Trailer Editor** in the side menu (also under *Plugins → Trailer Editor*).
+2. Click **Trailer Editor** in the side menu (also under *Plugins*).
 3. Search for a title, click it, edit the links and click **Save**.
 
-Each link shows a YouTube thumbnail preview and an **Open** button so you can check it.
-Leave every link box empty and save to remove all trailers from the item.
+Each link shows a YouTube thumbnail and an **Open** button. Leave every link box empty and
+save to remove all trailers from the item.
 
-### Checking that a trailer will play
+**Will it play?** Emby plays YouTube trailers in YouTube's embedded player, and YouTube refuses
+some videos there ("No compatible streams are currently available"). Each link is checked as
+soon as it is shown or pasted:
 
-Emby plays YouTube trailers through YouTube's embedded player, and YouTube refuses to play
-some videos there. Emby then shows *"No compatible streams are currently available"*.
-Every YouTube link is checked automatically as soon as it is shown or pasted, in two steps:
+1. *Server check*: your Emby server asks YouTube about the video. This catches embedding turned
+   off, age-restricted, private and deleted videos.
+2. *Playback test*: the page plays the video muted for a moment in a tiny hidden player, like
+   the one Emby uses. This also catches videos a **copyright owner blocks in other apps**, which
+   the server can't see.
 
-1. **Server check.** Your Emby server asks YouTube about the video. This catches embedding
-   turned off by the uploader, age-restricted, private and deleted videos.
-2. **Playback test.** The page plays the video for a moment, muted, in a tiny invisible
-   YouTube embedded player: the same kind of player Emby uses. This also catches videos
-   where a **copyright owner blocks playback in other apps**, which is common for fan edits
-   and re-uploads of studio trailers and is invisible to the server check.
+The result shows under the link: **it plays**, **won't play** (with the reason) or **couldn't
+check** (YouTube didn't answer, or it isn't a YouTube link). Links are tested one at a time and
+results are remembered for an hour. Saving a link that won't play asks for confirmation first.
 
-The result shows under the link:
+**Pinning.** Emby has no way to lock trailer links, so a full metadata refresh can replace your
+edits with what the metadata provider returns. With **Pin these links** ticked on save (the
+default), the plugin remembers your links and puts them back if a refresh changes them.
+**Unpin** keeps the current links but stops protecting them. If you change a pinned item's
+trailers some other way, the next refresh puts the pinned links back, so unpin first if you
+don't want that.
 
-- ✓ **It plays in an embedded player, so it should play in Emby.**
-- ✗ **Won't play**, with the reason
-- ? **Couldn't check**, e.g. YouTube didn't answer or it isn't a YouTube link
+### Trailer Library
 
-Links are tested one at a time and results are remembered for an hour. The **Test** button
-runs the same playback test in a visible player, so you can watch the trailer yourself.
-Saving a link marked ✗ asks for confirmation first, but is still allowed.
+Open it from the side menu, or with the *Library scan & pinned items* button on the Trailer
+Editor page.
 
-### Search YouTube
+**Library scan.** Goes through your movies and TV shows and reports:
 
-Next to the title in the editor, **Search YouTube** opens a YouTube search for
-`<name> <year> trailer` in a new tab, so you can find a replacement link quickly.
+- *Won't play*: YouTube links that are deleted, private, have embedding turned off or
+  (optionally) are age-restricted
+- *No trailers*: titles without trailer links (optionally ignoring titles that have local trailer files)
+- *Invalid link* and *Duplicate link*
 
-### Pinning
+Press **Scan now**, or turn on an automatic daily or weekly scan under *Settings* (off by
+default). Progress shows on the page and in Scheduled Tasks. Click the summary buttons to filter
+the results and **Edit trailers** on a title to fix it. Saving a title in the editor removes its
+results until the next scan.
 
-Emby only stores one list of trailer links per item and has no "lock" for it, so a full
-metadata refresh can replace your edits with whatever the metadata provider returns.
-When **Pin these links** is ticked on save (the default), the plugin remembers your links
-and puts them back automatically if a refresh changes them.
+**Scanning part of the library.** Above *Scan now*, choose *All titles*, *Movies* or *TV shows*
+and a range of first letters (*From* and *To*; `#` is every title that doesn't start with A-Z).
+Only that part is scanned and only its results are replaced; a finished scan of a segment also
+drops titles that are no longer in it. A scan you stop only replaces the titles it reached.
 
-Pinned items are listed on the **Trailer Library** page (see below). **Unpin** in the editor
-keeps the current links but stops protecting them.
+**Recently added titles.** The *Added* choice limits a scan to titles added in the last day, 3,
+7, 14, 30, 90 or 365 days, or a custom number of days (1-3650). Such a scan never removes
+results of titles it didn't scan. Under *Settings*, *Automatic scans cover* chooses whether
+scheduled scans check the whole library (the default) or only recently added titles.
 
-### Trailer Library page
+**Stop scan** stops everything, including the copyright-block test. If that test was
+interrupted, the page shows how many links were tested and a **Continue copyright-block test**
+button; starting a new scan clears the stop.
 
-Open it from the side menu, or with the *Library scan & pinned items* button on the
-Trailer Editor page. It has:
-
-- **Library scan**: goes through every movie and TV show and reports
-  - *Won't play*: YouTube links that are deleted, private, have embedding turned off, or
-    (optionally) are age-restricted
-  - *No trailers*: titles without trailer links (optionally ignoring titles that have local
-    trailer files)
-  - *Invalid link* and *Duplicate link*
-
-  Press **Scan now**, or turn on an automatic daily or weekly scan under *Settings* (off by
-  default). Progress is shown on the page and in Scheduled Tasks. Click the summary buttons to
-  filter the results, and press **Edit trailers** on a title to fix it in the editor. Saving a
-  title in the editor removes its results until the next scan.
-- **Scanning part of the library.** Above *Scan now*, choose *All titles*, *Movies* or *TV shows*
-  and a range of first letters (*From* and *To*; `#` is every title that doesn't start with A-Z).
-  Only that part is scanned, and only its results are replaced: results for other titles are
-  kept, and a finished scan of a segment also drops titles that are no longer in it. A scan you
-  stop only replaces the titles it reached. The copyright-block test covers just the scanned part.
-- **Recently added titles.** The *Added* choice limits a scan to titles added (Emby's "date
-  added") in the last day, 3, 7, 14, 30, 90 or 365 days, or a custom number of days (1-3650). It
-  combines with the type and letter choices. Because "recently added" changes over time, such a
-  scan never removes results of titles it didn't scan, and the copyright-block test covers only
-  the links of titles that were within the date range when the scan started. Under *Settings*,
-  *Automatic scans cover* sets whether scheduled scans check the whole library (the default) or
-  only titles added in the last N days.
-- **Stop scan** stops everything, including the copyright-block test. If that test was
-  interrupted, the page shows how many links were tested and a **Continue copyright-block test**
-  button; starting a new scan clears the stop.
-- **Scan results**, **Pinned items** and **Settings**: collapsible sections. The lists load
-  only when opened, are searchable by title and are paged 50 at a time, so they stay fast
-  with tens of thousands of titles.
+**Scan results**, **Pinned items** and **Settings** are collapsible sections. The lists load
+when opened, are searchable by title and paged 50 at a time, so they stay fast with tens of
+thousands of titles.
 
 **Age restrictions (on by default).** Detecting age-restricted videos needs a second request to
-YouTube for every link, so scans take about twice as long. Turn it off under Settings if scans are
-too slow.
+YouTube for every link, so scans take about twice as long. Turn it off under Settings if scans
+are too slow.
 
-The Library scan panel shows a warning while either of these options is on.
+**Large libraries.** The scan pauses between YouTube requests (1 second by default, about 3,600
+links an hour) so YouTube doesn't block your server. A link's result is reused for 30 days, so
+after the first full scan, weekly scans only check new and older links. If YouTube starts
+refusing requests, the scan slows down, and after 25 failures in a row it stops checking links
+for that run and says so. The pause and the re-check days can be changed under *Settings*.
 
-**Large libraries.** The scan pauses between YouTube requests (1 second by default, about
-3,600 links an hour) so YouTube doesn't block your server. A link's result is reused for 30
-days, so after the first full scan, weekly scans only check new and older links. If YouTube
-starts refusing requests, the scan slows down, and after 25 failures in a row it stops checking
-links for that run and says so. All of this can be changed under *Settings*.
+**Copyright blocks (on by default, needs an open browser).** Only a browser can detect that a
+video is blocked by its copyright owner. With *Test playback in this browser to catch copyright
+blocks* ticked under Settings, the Trailer Library page plays each scanned link muted in a hidden
+YouTube player. **This only runs while the Trailer Library page stays open and visible in a
+browser window.** If you close it, switch tabs or the computer sleeps, testing pauses and
+continues next time you open the page. With this test on, the scan counts as finished only
+after the test is done; the progress bar covers both steps. Blocked links appear as *Won't
+play*. Links that already failed the server check, or were tested within the re-check period,
+are skipped. The test covers only the part of the library that was scanned.
 
-**Copyright blocks (on by default, needs an open browser).** Some videos, often fan edits and
-re-uploads of studio trailers, are blocked by a copyright owner from playing in other apps.
-Only a browser can detect this. With *Test playback in this browser to catch copyright blocks*
-ticked under Settings, the Trailer Library page plays each scanned link for a moment, muted, in a
-hidden YouTube player. **This only runs while the Trailer Library page stays open and visible
-in a browser window.** If you close it, switch tabs or the computer sleeps, testing pauses and
-continues where it left off the next time you open the page. With this test on, the scan counts as
-finished (and the problem counts appear) only after the test is done; the progress bar covers both steps. Blocked links appear in the scan
-results as *Won't play*. Links that already failed the server check, or were tested within the
-re-check period, are skipped.
-
-**Fewer tests needed.** Playback results are shared:
-- every link tested on the Trailer Editor page (automatically or with Test) counts, and
-- with *Learn from trailers played in Emby* on (the default), a YouTube trailer that Emby
-  reports as playing is marked as working. Failed trailers never reach the server (they fail in
-  the browser), so this only finds working links. Each reported trailer play is written to the
-  Emby log as `Trailer Editor: trailer playback reported`.
+**Fewer tests needed.** Playback results are shared: every link tested on the Trailer Editor
+page counts, and with *Learn from trailers played in Emby* on (the default), a YouTube trailer
+that Emby reports as playing is marked as working. Failed trailers never reach the server, so
+this only finds working links. Each reported play is written to the Emby log as
+`Trailer Editor: trailer playback reported`.
 
 ## HTTP API
 
@@ -194,7 +187,7 @@ curl -X POST -G "http://localhost:8096/emby/TrailerEditor/Items/12345" \
   --data-urlencode "Pin=true"
 ```
 
-## Build
+## Building from source
 
 Needs the .NET SDK 6 or newer.
 
@@ -204,10 +197,16 @@ dotnet build TrailerEditor/TrailerEditor.csproj -c Release
 # output: TrailerEditor/bin/Release/netstandard2.0/TrailerEditor.dll
 ```
 
-## Notes
+**Releases.** Set the version in `TrailerEditor/TrailerEditor.csproj`, commit, then push a tag
+that matches it, e.g. `v1.9.1` for version `1.9.1.0`. GitHub Actions builds, tests and publishes
+a release with `TrailerEditor.zip` attached. Every other build uploads the same zip as a
+workflow artifact.
+
+## Notes and limitations
 
 - Only remote (online) trailer links are edited. Local trailer files, such as
   `Movie-trailer.mkv` or a `trailers` folder next to the movie, are not affected.
 - TV show trailers are set on the series, not on seasons or episodes.
-- If you change an item's trailers some other way while it is pinned, the next metadata
-  refresh puts the pinned links back. Unpin it first if you don't want that.
+- The server-side scan can't detect copyright blocks; that needs the browser test above.
+
+This project is not affiliated with Emby or YouTube.

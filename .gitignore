@@ -3,3 +3,7 @@ obj/
 *.user
 .vs/
 TestResults/
+
+# Release packaging
+/dist/
+/TrailerEditor.zip

@@ -2,6 +2,8 @@ name: Build
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -17,20 +19,54 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Check tag matches plugin version (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          csproj_version="$(sed -n 's:.*<AssemblyVersion>\([0-9]*\.[0-9]*\.[0-9]*\)\.[0-9]*</AssemblyVersion>.*:\1:p' TrailerEditor/TrailerEditor.csproj | head -n1)"
+          if [ -z "$csproj_version" ]; then
+            echo "::error::Could not read AssemblyVersion from TrailerEditor/TrailerEditor.csproj"
+            exit 1
+          fi
+          if [ "$tag_version" != "$csproj_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the plugin version $csproj_version.0 in TrailerEditor.csproj. Update the version or tag v$csproj_version."
+            exit 1
+          fi
+
       - name: Test
         run: dotnet test TrailerEditor.sln -c Release
 
       - name: Build plugin
         run: dotnet build TrailerEditor/TrailerEditor.csproj -c Release
 
-      - name: Upload plugin DLL
+      - name: Create TrailerEditor.zip
+        run: |
+          mkdir -p dist
+          cp TrailerEditor/bin/Release/netstandard2.0/TrailerEditor.dll dist/
+          cat > dist/INSTALL.txt <<'INSTALL'
+          Trailer Editor for Emby - install
+          1. Copy TrailerEditor.dll into Emby's plugins folder:
+             Docker: /config/plugins   Linux: /var/lib/emby/plugins
+             Windows: %AppData%\Emby-Server\programdata\plugins
+          2. Linux/Docker: give the file the same owner as the other plugins in that folder
+             (for example: chown --reference=<another plugin>.dll TrailerEditor.dll).
+          3. Restart Emby Server.
+          4. Open Plugins in the Emby dashboard and check that Trailer Editor is listed.
+          More: https://github.com/PeterDBNL/emby-trailer-editor
+          INSTALL
+          sed -i 's/^          //' dist/INSTALL.txt
+          (cd dist && zip -9 ../TrailerEditor.zip TrailerEditor.dll INSTALL.txt)
+          unzip -l TrailerEditor.zip
+
+      - name: Upload plugin zip
         uses: actions/upload-artifact@v4
         with:
           name: TrailerEditor
-          path: TrailerEditor/bin/Release/netstandard2.0/TrailerEditor.dll
+          path: TrailerEditor.zip
 
-      - name: Attach DLL to release (tags only)
+      - name: Publish GitHub Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: TrailerEditor/bin/Release/netstandard2.0/TrailerEditor.dll
+          files: TrailerEditor.zip
+          generate_release_notes: true

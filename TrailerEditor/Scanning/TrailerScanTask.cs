@@ -31,6 +31,42 @@ namespace TrailerEditor.Scanning
             _logger = logManager.GetLogger("TrailerEditor");
         }
 
+        private static readonly object StateLock = new object();
+        private static DateTime? _requestedUtc;
+
+        /// <summary>The scan that's running right now (live counts), or null.</summary>
+        public static ScanResults InProgress { get; private set; }
+
+        /// <summary>
+        /// Marks a scan as requested. Returns false if one is already running or about to
+        /// start, so pressing Scan now twice doesn't queue a second scan.
+        /// </summary>
+        public static bool TryRequestStart()
+        {
+            lock (StateLock)
+            {
+                if (InProgress != null || IsStarting)
+                {
+                    return false;
+                }
+
+                _requestedUtc = DateTime.UtcNow;
+                return true;
+            }
+        }
+
+        /// <summary>True between pressing Scan now and Emby actually starting the task (up to a minute).</summary>
+        public static bool IsStarting
+        {
+            get
+            {
+                lock (StateLock)
+                {
+                    return InProgress == null && _requestedUtc != null && DateTime.UtcNow - _requestedUtc.Value < TimeSpan.FromMinutes(1);
+                }
+            }
+        }
+
         public string Name => "Scan trailer links";
 
         public string Key => "TrailerEditorScan";
@@ -113,6 +149,12 @@ namespace TrailerEditor.Scanning
 
             results.ItemsTotal = items.Length;
             _logger.Info("Trailer Editor: scanning {0} movies and TV shows", items.Length);
+
+            lock (StateLock)
+            {
+                InProgress = results;
+                _requestedUtc = null;
+            }
 
             try
             {
@@ -265,6 +307,10 @@ namespace TrailerEditor.Scanning
                     .ThenBy(x => x.Kind)
                     .ToList();
                 store.SaveScan(results);
+                lock (StateLock)
+                {
+                    InProgress = null;
+                }
 
                 _logger.Info("Trailer Editor: scan {0}. {1} titles, {2} links ({3} checked with YouTube, {4} from earlier results), {5} issues",
                     results.Completed ? "finished" : "stopped", results.ItemsScanned, results.LinksTotal,

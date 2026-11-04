@@ -233,6 +233,21 @@ public class ScanTaskTests
     }
 
     [Fact]
+    public void PressingScanNowTwiceStartsOneScan()
+    {
+        Run(); // clears any earlier request
+        Assert.True(TrailerScanTask.TryRequestStart());
+        Assert.True(TrailerScanTask.IsStarting);
+        Assert.False(TrailerScanTask.TryRequestStart());
+
+        Run(); // Emby starts the task: no longer "starting", and nothing left running
+        Assert.False(TrailerScanTask.IsStarting);
+        Assert.Null(TrailerScanTask.InProgress);
+        Assert.True(TrailerScanTask.TryRequestStart());
+        Run();
+    }
+
+    [Fact]
     public void NoAutomaticScanByDefault()
     {
         var config = new TrailerEditor.Configuration.PluginConfiguration();

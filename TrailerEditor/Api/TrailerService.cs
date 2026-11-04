@@ -63,6 +63,12 @@ namespace TrailerEditor.Api
         public int LinksFromCache { get; set; }
         public int LinksNotChecked { get; set; }
         public string Note { get; set; }
+
+        /// <summary>Live counts while a scan is running.</summary>
+        public int ScannedSoFar { get; set; }
+        public int TotalToScan { get; set; }
+        public int ProblemsSoFar { get; set; }
+
         public int IssueCount { get; set; }
         public int NoTrailersCount { get; set; }
         public int UnplayableCount { get; set; }
@@ -220,7 +226,11 @@ namespace TrailerEditor.Api
 
         public object Post(StartScan request)
         {
-            _taskManager.QueueIfNotRunning<TrailerScanTask>();
+            if (TrailerScanTask.TryRequestStart())
+            {
+                _taskManager.QueueIfNotRunning<TrailerScanTask>();
+            }
+
             return BuildStatus();
         }
 
@@ -293,11 +303,41 @@ namespace TrailerEditor.Api
             var config = Plugin.Instance.Configuration;
             var playback = EntryPoint.Store.GetPlaybackCounts(config.ScanRecheckDays);
             var state = worker?.State.ToString() ?? "Idle";
+            var live = TrailerScanTask.InProgress;
+            if (state != "Cancelling")
+            {
+                if (live != null)
+                {
+                    state = "Running";
+                }
+                else if (TrailerScanTask.IsStarting)
+                {
+                    state = "Starting";
+                }
+                else if (state == "Running")
+                {
+                    // Emby says running but the scan hasn't begun its work yet.
+                    state = "Starting";
+                }
+            }
+
+            double? progress = null;
+            if (live != null)
+            {
+                progress = live.ItemsTotal > 0 ? 100.0 * live.ItemsScanned / live.ItemsTotal : 0;
+            }
+            else if (state != "Idle")
+            {
+                progress = worker?.CurrentProgress;
+            }
 
             return new ScanStatus
             {
                 State = state,
-                Progress = state == "Idle" ? null : worker?.CurrentProgress,
+                Progress = progress,
+                ScannedSoFar = live?.ItemsScanned ?? 0,
+                TotalToScan = live?.ItemsTotal ?? 0,
+                ProblemsSoFar = live?.Issues.Count ?? 0,
                 HasResults = results.StartedUtc != null,
                 StartedUtc = results.StartedUtc,
                 FinishedUtc = results.FinishedUtc,

@@ -290,13 +290,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         function renderStatus(s) {
             lastState = s;
-            var running = s.State === 'Running' || s.State === 'Cancelling';
+            var running = s.State === 'Running' || s.State === 'Cancelling' || s.State === 'Starting';
             var status = q('.tl-status');
             var bar = q('.tl-bar');
 
             if (running) {
                 var pct = Math.round(s.Progress || 0);
-                status.textContent = s.State === 'Cancelling' ? 'Stopping the scan…' : 'Scanning… ' + pct + '%';
+                if (s.State === 'Starting') {
+                    status.textContent = 'Starting the scan…';
+                } else if (s.State === 'Cancelling') {
+                    status.textContent = 'Stopping the scan…';
+                } else {
+                    var found = s.ProblemsSoFar === 1 ? '1 problem' : number(s.ProblemsSoFar) + ' problems';
+                    status.textContent = 'Scanning… ' + pct + '%' +
+                        (s.TotalToScan ? ' (' + number(s.ScannedSoFar) + ' of ' + number(s.TotalToScan) + ' titles)' : '') +
+                        ' · ' + found + ' found so far';
+                }
                 bar.style.display = '';
                 bar.firstElementChild.style.width = pct + '%';
             } else {
@@ -316,8 +325,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             note.textContent = s.Note || '';
             note.style.display = s.Note && !running ? '' : 'none';
 
+            // Problem counts only once a scan has finished.
             var chips = [];
-            if (s.HasResults) {
+            if (s.HasResults && !running) {
                 chips.push(['', number(s.IssueCount) + ' problems']);
                 if (s.UnplayableCount) { chips.push(['Unplayable', number(s.UnplayableCount) + " won't play"]); }
                 if (s.NoTrailersCount) { chips.push(['NoTrailers', number(s.NoTrailersCount) + ' without trailers']); }
@@ -328,7 +338,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 return '<button type="button" class="tl-chip" data-kind="' + c[0] + '">' + escapeHtml(c[1]) + '</button>';
             }).join('');
 
-            q('.tl-issuesCount').textContent = s.HasResults ? '(' + number(s.IssueCount) + ')' : '';
+            q('.tl-issuesCount').textContent = running
+                ? (s.HasResults ? '(' + number(s.IssueCount) + ' from the last scan, new scan running)' : '(scan running)')
+                : (s.HasResults ? '(' + number(s.IssueCount) + ')' : '');
             q('.tl-pinnedCount').textContent = '(' + number(s.PinnedCount) + ')';
             q('.tl-scan').style.display = running ? 'none' : '';
             q('.tl-cancel').style.display = s.State === 'Running' ? '' : 'none';
@@ -385,7 +397,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
 
         q('.tl-scan').addEventListener('click', function () {
-            api('POST', 'TrailerEditor/Scan').then(renderStatus, function () {
+            var button = this;
+            button.disabled = true;
+            q('.tl-status').textContent = 'Starting the scan…';
+            api('POST', 'TrailerEditor/Scan').then(function (s) {
+                button.disabled = false;
+                renderStatus(s);
+            }, function () {
+                button.disabled = false;
                 q('.tl-status').textContent = 'Couldn\'t start the scan.';
             });
         });

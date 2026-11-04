@@ -63,7 +63,7 @@ public class ScanTaskTests
         plugin.Configuration.ScanRecheckDays = 30;
 
         _library.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(() => _items);
-        new EntryPoint(_library.Object, logManager.Object, paths.Object, new Mock<IJsonSerializer>().Object);
+        new EntryPoint(_library.Object, logManager.Object, paths.Object, new Mock<IJsonSerializer>().Object, new Mock<MediaBrowser.Controller.Session.ISessionManager>().Object);
         EntryPoint.Checker = _checker;
 
         _checker.Answer = url => url.Contains("blockblock1")
@@ -172,6 +172,64 @@ public class ScanTaskTests
         Plugin.Instance.Configuration.ScanReportNoTrailers = false;
         _items = new BaseItem[] { MovieWith(1, "Empty") };
         Assert.Empty(Run().Issues);
+    }
+
+    [Fact]
+    public void PlaybackQueueListsScannedYouTubeLinksNotYetTested()
+    {
+        _items = new BaseItem[]
+        {
+            MovieWith(1, "A", Ok1, "https://vimeo.com/1"),
+            MovieWith(2, "B", Blocked),                       // already broken: no browser test needed
+            MovieWith(3, "C", Ok2),
+            MovieWith(4, "D", "https://youtu.be/okokokokok2") // same video as C: tested once
+        };
+        Run();
+
+        var queue = EntryPoint.Store.GetPlaybackQueue(10, 30).Select(q => q.VideoId).ToArray();
+        Assert.Equal(new[] { "okokokokok1", "okokokokok2" }, queue);
+        Assert.Equal(2, EntryPoint.Store.GetPlaybackCounts(30).Total);
+
+        EntryPoint.Store.RecordPlayback("okokokokok1", YouTubeChecker.Ok, "Plays.", "browser");
+        Assert.Equal(new[] { "okokokokok2" }, EntryPoint.Store.GetPlaybackQueue(10, 30).Select(q => q.VideoId).ToArray());
+
+        // A test that couldn't decide is retried later, not straight away.
+        EntryPoint.Store.RecordPlayback("okokokokok2", YouTubeChecker.Unknown, "No answer.", "browser");
+        Assert.Empty(EntryPoint.Store.GetPlaybackQueue(10, 30));
+        Assert.Equal(2, EntryPoint.Store.GetPlaybackCounts(30).Done);
+    }
+
+    [Fact]
+    public void BlockedPlaybackShowsAsWontPlayForEveryTitleUsingTheVideo()
+    {
+        _items = new BaseItem[] { MovieWith(3, "C", Ok2), MovieWith(4, "D", "https://youtu.be/okokokokok2"), MovieWith(5, "E", Ok1) };
+        Run();
+        Assert.Empty(EntryPoint.Store.GetIssues());
+
+        EntryPoint.Store.RecordPlayback("okokokokok2", YouTubeChecker.Error, "Blocked by a copyright owner.", "browser");
+
+        var issues = EntryPoint.Store.GetIssues();
+        Assert.Equal(new[] { "C", "D" }, issues.Select(i => i.ItemName).ToArray());
+        Assert.All(issues, i => Assert.True(i.FromPlaybackTest));
+        Assert.All(issues, i => Assert.Equal(IssueKinds.Unplayable, i.Kind));
+        Assert.Equal(1, EntryPoint.Store.GetPlaybackCounts(30).Blocked);
+
+        // A later run that plays fine (e.g. the block was lifted) clears it.
+        EntryPoint.Store.RecordPlayback("okokokokok2", YouTubeChecker.Ok, "Plays.", "emby");
+        Assert.Empty(EntryPoint.Store.GetIssues());
+    }
+
+    [Fact]
+    public void PlaybackResultsSurviveTheNextScan()
+    {
+        _items = new BaseItem[] { MovieWith(3, "C", Ok2) };
+        Run();
+        EntryPoint.Store.RecordPlayback("okokokokok2", YouTubeChecker.Error, "Blocked.", "browser");
+
+        Run();
+
+        Assert.Single(EntryPoint.Store.GetIssues());
+        Assert.Empty(EntryPoint.Store.GetPlaybackQueue(10, 30));
     }
 
     [Fact]

@@ -26,6 +26,15 @@ namespace TrailerEditor.Configuration
         /// <summary>Also detect age-restricted videos (one extra request per link).</summary>
         public bool ScanCheckAgeRestriction { get; set; } = false;
 
+        /// <summary>
+        /// Let the Trailer Library page play each scanned link in a hidden, muted player to catch
+        /// copyright blocks. Only runs while that page is open in a browser.
+        /// </summary>
+        public bool ScanBrowserPlaybackTest { get; set; } = false;
+
+        /// <summary>Mark a YouTube trailer as working when Emby reports it playing.</summary>
+        public bool ScanLearnFromPlayback { get; set; } = true;
+
         /// <summary>Pause between YouTube requests, to avoid being rate limited.</summary>
         public int ScanRequestDelayMs { get; set; } = 1000;
 

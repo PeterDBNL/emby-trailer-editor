@@ -12,7 +12,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     };
 
     var settingNames = ['PinEditedTrailers', 'ScanReportNoTrailers', 'ScanIgnoreItemsWithLocalTrailers',
-        'ScanCheckLinks', 'ScanCheckAgeRestriction', 'ScanRequestDelayMs', 'ScanRecheckDays'];
+        'ScanCheckLinks', 'ScanCheckAgeRestriction', 'ScanBrowserPlaybackTest', 'ScanLearnFromPlayback',
+        'ScanRequestDelayMs', 'ScanRecheckDays'];
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -52,6 +53,109 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     function debounce(fn, ms) {
         var timer = null;
         return function () { clearTimeout(timer); timer = setTimeout(fn, ms); };
+    }
+
+    // ---- Hidden YouTube player (same as on the Trailer Editor page) ----
+
+    // Loads YouTube's IFrame Player API once, reusing it if Emby's own player already did.
+    var ytApiPromise = null;
+    function loadYouTubeApi() {
+        if (window.YT && typeof window.YT.Player === 'function') { return Promise.resolve(window.YT); }
+        if (ytApiPromise) { return ytApiPromise; }
+        ytApiPromise = new Promise(function (resolve, reject) {
+            var previous = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = function () {
+                if (typeof previous === 'function') { try { previous(); } catch (e) { /* ignore */ } }
+                resolve(window.YT);
+            };
+            if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+                var script = document.createElement('script');
+                script.src = 'https://www.youtube.com/iframe_api';
+                script.async = true;
+                script.onerror = function () { reject(new Error('load failed')); };
+                document.head.appendChild(script);
+            }
+            var started = Date.now();
+            (function poll() {
+                if (window.YT && typeof window.YT.Player === 'function') { resolve(window.YT); return; }
+                if (Date.now() - started > 10000) { reject(new Error('timeout')); return; }
+                setTimeout(poll, 250);
+            })();
+        });
+        ytApiPromise.catch(function () { ytApiPromise = null; });
+        return ytApiPromise;
+    }
+
+    // YouTube IFrame player error codes.
+    function playerError(code) {
+        switch (code) {
+            case 101:
+            case 150:
+                return { status: 'error', text: 'Blocked: the uploader or a copyright owner doesn\'t allow this video to play inside other apps, so it won\'t play in Emby.' };
+            case 100:
+                return { status: 'error', text: 'Video not found. It may be deleted or private.' };
+            case 2:
+                return { status: 'error', text: 'YouTube says the video id is invalid.' };
+            case 5:
+                return { status: 'unknown', text: 'The video couldn\'t play in this browser (YouTube player error 5). Try the Trailer button in Emby.' };
+            case 153:
+                return { status: 'unknown', text: 'The test player couldn\'t start (YouTube error 153). Try the Trailer button in Emby instead.' };
+            default:
+                return { status: 'unknown', text: 'YouTube player error ' + code + '. Try the Trailer button in Emby.' };
+        }
+    }
+
+    var PLAYS_OK = { status: 'ok', text: 'It plays in an embedded player, so it should play in Emby.' };
+
+    function makePlayerFrame(id, muted) {
+        var iframe = document.createElement('iframe');
+        iframe.src = 'https://www.youtube.com/embed/' + id + '?enablejsapi=1&autoplay=1&playsinline=1&rel=0' +
+            (muted ? '&mute=1' : '') + '&origin=' + encodeURIComponent(window.location.origin);
+        iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen');
+        iframe.setAttribute('allowfullscreen', '');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        return iframe;
+    }
+
+    function playHidden(id) {
+        return loadYouTubeApi().then(function (YT) {
+            return new Promise(function (resolve) {
+                var holder = document.createElement('div');
+                holder.setAttribute('aria-hidden', 'true');
+                holder.style.cssText = 'position:fixed;right:0;bottom:0;width:200px;height:113px;opacity:0.01;pointer-events:none;overflow:hidden;';
+                var iframe = makePlayerFrame(id, true);
+                iframe.style.cssText = 'width:200px;height:113px;border:0;';
+                holder.appendChild(iframe);
+                document.body.appendChild(holder);
+
+                var player = null;
+                var done = false;
+                var timer = null;
+                function finish(result) {
+                    if (done) { return; }
+                    done = true;
+                    clearTimeout(timer);
+                    try { if (player && player.destroy) { player.destroy(); } } catch (e) { /* ignore */ }
+                    if (holder.parentNode) { holder.parentNode.removeChild(holder); }
+                    resolve(result);
+                }
+
+                player = new YT.Player(iframe, {
+                    events: {
+                        onReady: function (e) {
+                            try { e.target.mute(); e.target.playVideo(); } catch (x) { /* ignore */ }
+                        },
+                        onStateChange: function (e) { if (e.data === 1) { finish(PLAYS_OK); } },
+                        onError: function (e) { finish(playerError(e.data)); }
+                    }
+                });
+                timer = setTimeout(function () {
+                    finish({ status: 'unknown', text: 'The automatic playback test didn\'t finish. Press Test to be sure.' });
+                }, 15000);
+            });
+        }, function () {
+            return { status: 'unknown', text: 'Couldn\'t load the YouTube player for the automatic test. Press Test to be sure.' };
+        });
     }
 
     // A searchable, paged list that loads when its <details> section is opened.
@@ -199,6 +303,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             lastIssueCount = s.IssueCount;
             self._lastFinished = s.FinishedUtc;
 
+            renderPlayback(s);
             schedulePoll(running ? 2000 : 15000);
         }
 
@@ -258,11 +363,89 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             }).then(function () {
                 loading.hide();
                 q('.tl-settingsMsg').textContent = 'Settings saved.';
+                loadStatus();
             }, function () {
                 loading.hide();
                 q('.tl-settingsMsg').textContent = 'Couldn\'t save the settings.';
             });
         });
+
+        // ---- Browser playback tests (copyright blocks) ----
+        // Works through the scanned YouTube links in a hidden, muted player while this page
+        // is open and visible. Results go to the server, so it picks up where it left off.
+        var runner = { running: false, enabled: false, state: '', unknownInARow: 0 };
+
+        function setPlaybackText(text) { q('.tl-playback').textContent = text; }
+
+        function renderPlayback(s) {
+            runner.enabled = !!s.BrowserPlaybackTest;
+            var box = q('.tl-playback');
+            if (!runner.enabled) {
+                box.textContent = 'Copyright-block test: off. Turn it on under Settings to test every link in this browser.';
+                return;
+            }
+            if (!s.HasResults) {
+                box.textContent = 'Copyright-block test: waiting for the first library scan.';
+                return;
+            }
+            var progress = number(s.PlaybackDone) + ' of ' + number(s.PlaybackTotal) + ' links tested' +
+                (s.PlaybackBlocked ? ', ' + number(s.PlaybackBlocked) + ' blocked' : '');
+            var state = s.PlaybackDone >= s.PlaybackTotal ? 'all done' : (runner.state || 'starting…');
+            box.textContent = 'Copyright-block test: ' + progress + ' · ' + state + '. Keep this page open and visible.';
+            startRunner();
+        }
+
+        function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+        function startRunner() {
+            if (runner.running || !runner.enabled || !self._active) { return; }
+            runner.running = true;
+            runner.state = 'running';
+
+            function next() {
+                if (!self._active || !runner.enabled) {
+                    runner.running = false;
+                    runner.state = '';
+                    return Promise.resolve();
+                }
+                if (document.hidden) {
+                    runner.state = 'paused while this tab is in the background';
+                    return wait(5000).then(next);
+                }
+                return api('GET', 'TrailerEditor/Playback/Queue', { Limit: 10 }).then(function (queue) {
+                    var items = queue.Items || [];
+                    if (!items.length) {
+                        runner.state = 'all done';
+                        return wait(60000).then(next);
+                    }
+                    runner.state = 'running';
+                    return items.reduce(function (chain, entry) {
+                        return chain.then(function () {
+                            if (!self._active || !runner.enabled || document.hidden) { return null; }
+                            runner.state = 'testing "' + entry.ItemName + '"';
+                            return playHidden(entry.VideoId).then(function (r) {
+                                runner.unknownInARow = r.status === 'unknown' ? runner.unknownInARow + 1 : 0;
+                                return api('POST', 'TrailerEditor/Playback/Result',
+                                    { VideoId: entry.VideoId, Status: r.status, Message: r.text, Source: 'browser' })
+                                    .then(function (s) { lastState = s; renderPlayback(s); }, function () { /* keep going */ });
+                            });
+                        });
+                    }, Promise.resolve()).then(function () {
+                        if (runner.unknownInARow >= 5) {
+                            runner.state = 'the YouTube player isn\'t responding, retrying in a minute';
+                            runner.unknownInARow = 0;
+                            return wait(60000).then(next);
+                        }
+                        return next();
+                    });
+                }, function () {
+                    runner.state = 'couldn\'t reach the server, retrying in a minute';
+                    return wait(60000).then(next);
+                });
+            }
+
+            next().catch(function () { runner.running = false; runner.state = ''; });
+        }
 
         this.loadStatus = loadStatus;
         this.loadSettings = loadSettings;

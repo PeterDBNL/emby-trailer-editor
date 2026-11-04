@@ -69,6 +69,10 @@ namespace TrailerEditor.Api
         public int InvalidLinkCount { get; set; }
         public int DuplicateLinkCount { get; set; }
         public int PinnedCount { get; set; }
+        public bool BrowserPlaybackTest { get; set; }
+        public int PlaybackTotal { get; set; }
+        public int PlaybackDone { get; set; }
+        public int PlaybackBlocked { get; set; }
     }
 
     [Route("/TrailerEditor/Pinned", "GET", Summary = "Lists items whose trailer links are pinned, one page at a time")]
@@ -77,6 +81,31 @@ namespace TrailerEditor.Api
         public string SearchTerm { get; set; }
         public int? StartIndex { get; set; }
         public int? Limit { get; set; }
+    }
+
+    public class PlaybackQueue
+    {
+        public PlaybackQueueEntry[] Items { get; set; }
+    }
+
+    [Route("/TrailerEditor/Playback/Queue", "GET", Summary = "Next scanned YouTube links that need a browser playback test")]
+    public class GetPlaybackQueue : IReturn<PlaybackQueue>
+    {
+        public int? Limit { get; set; }
+    }
+
+    [Route("/TrailerEditor/Playback/Result", "POST", Summary = "Records the result of a browser playback test")]
+    public class PostPlaybackResult : IReturn<ScanStatus>
+    {
+        public string VideoId { get; set; }
+
+        /// <summary>ok, error or unknown.</summary>
+        public string Status { get; set; }
+
+        public string Message { get; set; }
+
+        /// <summary>browser (Trailer Library page) or editor.</summary>
+        public string Source { get; set; }
     }
 
     [Route("/TrailerEditor/Scan", "GET", Summary = "Gets the state and summary of the library scan")]
@@ -219,13 +248,46 @@ namespace TrailerEditor.Api
             };
         }
 
+        public object Get(GetPlaybackQueue request)
+        {
+            var limit = Math.Max(1, Math.Min(request.Limit ?? 10, 100));
+            var items = EntryPoint.Store.GetPlaybackQueue(limit, Plugin.Instance.Configuration.ScanRecheckDays);
+            return new PlaybackQueue { Items = items.ToArray() };
+        }
+
+        public object Post(PostPlaybackResult request)
+        {
+            var status = (request.Status ?? string.Empty).ToLowerInvariant();
+            if (status != YouTubeChecker.Ok && status != YouTubeChecker.Error && status != YouTubeChecker.Unknown)
+            {
+                throw new ArgumentException("Status must be ok, error or unknown.");
+            }
+
+            var videoId = request.VideoId ?? string.Empty;
+            if (YouTubeChecker.VideoIdOf("https://www.youtube.com/watch?v=" + videoId) != videoId)
+            {
+                throw new ArgumentException("Not a YouTube video id: " + videoId);
+            }
+
+            var message = request.Message;
+            if (message != null && message.Length > 300)
+            {
+                message = message.Substring(0, 300);
+            }
+
+            EntryPoint.Store.RecordPlayback(videoId, status, message, request.Source == "editor" ? "editor" : "browser");
+            return BuildStatus();
+        }
+
         private static int PageSize(int? limit) => Math.Max(1, Math.Min(limit ?? 50, 200));
 
         private ScanStatus BuildStatus()
         {
             var worker = _taskManager.ScheduledTasks.FirstOrDefault(t => t.ScheduledTask is TrailerScanTask);
             var results = EntryPoint.Store.Current;
-            var issues = results.Issues ?? new List<ScanIssue>();
+            var issues = EntryPoint.Store.GetIssues();
+            var config = Plugin.Instance.Configuration;
+            var playback = EntryPoint.Store.GetPlaybackCounts(config.ScanRecheckDays);
             var state = worker?.State.ToString() ?? "Idle";
 
             return new ScanStatus
@@ -248,7 +310,11 @@ namespace TrailerEditor.Api
                 UnplayableCount = issues.Count(i => i.Kind == IssueKinds.Unplayable),
                 InvalidLinkCount = issues.Count(i => i.Kind == IssueKinds.InvalidLink),
                 DuplicateLinkCount = issues.Count(i => i.Kind == IssueKinds.DuplicateLink),
-                PinnedCount = Manager.PinnedCount
+                PinnedCount = Manager.PinnedCount,
+                BrowserPlaybackTest = config.ScanBrowserPlaybackTest,
+                PlaybackTotal = playback.Total,
+                PlaybackDone = playback.Done,
+                PlaybackBlocked = playback.Blocked
             };
         }
 

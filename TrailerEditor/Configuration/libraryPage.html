@@ -51,13 +51,13 @@
                     <div class="tl-bar" style="display:none;"><div></div></div>
                     <div class="tl-note" style="display:none;"></div>
                     <div class="tl-chips"></div>
+                    <div class="tl-playback tl-meta" style="margin-top:.6em;"></div>
                     <div class="tl-buttons">
                         <button is="emby-button" type="button" class="raised button-submit tl-scan"><span>Scan now</span></button>
                         <button is="emby-button" type="button" class="raised tl-cancel" style="display:none;"><span>Stop scan</span></button>
                     </div>
                     <div class="fieldDescription" style="margin-top:.8em;">
                         The scan also runs weekly; change that under <em>Scheduled Tasks → Trailer Editor</em>.
-                        Copyright blocks can only be detected in a browser, so the Trailer Editor page still tests each link when you open a title.
                     </div>
                 </div>
 
@@ -131,6 +131,30 @@
                                 <input is="emby-checkbox" type="checkbox" class="tl-ScanCheckAgeRestriction" />
                                 <span>Also detect age-restricted videos (twice as many requests to YouTube)</span>
                             </label>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-ScanBrowserPlaybackTest" />
+                                <span>Test playback in this browser to catch copyright blocks</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Plays each scanned link for a moment, muted, in a hidden YouTube player, the same kind Emby uses.
+                                This is the only way to find videos a copyright owner has blocked in other apps.
+                                <strong>It only runs while this Trailer Library page stays open and visible in a browser window.</strong>
+                                If you close the page, switch tabs or the computer sleeps, testing pauses and continues where it left off the next time you open this page.
+                                Links that already failed the server check, or were tested recently, are skipped.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-ScanLearnFromPlayback" />
+                                <span>Learn from trailers played in Emby</span>
+                            </label>
+                            <div class="fieldDescription">
+                                When Emby reports a YouTube trailer playing, that link is marked as working, so it isn't tested again.
+                                Failed trailers never reach the server (they fail in the browser), so this only finds working links.
+                                Each reported trailer play is written to the Emby log as "Trailer Editor: trailer playback reported".
+                            </div>
                         </div>
                         <div class="inputContainer">
                             <input is="emby-input" type="number" min="0" max="60000" step="100" class="tl-ScanRequestDelayMs" label="Pause between YouTube requests (milliseconds)" />

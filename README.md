@@ -99,8 +99,22 @@ days, so after the first full scan, weekly scans only check new and older links.
 starts refusing requests, the scan slows down, and after 25 failures in a row it stops checking
 links for that run and says so. All of this can be changed under *Settings*.
 
-Copyright blocks can only be detected by a browser, so the scan can't find them. The Trailer
-Editor still tests every link when you open a title.
+**Copyright blocks (optional, needs an open browser).** Some videos, often fan edits and
+re-uploads of studio trailers, are blocked by a copyright owner from playing in other apps.
+Only a browser can detect this. Tick *Test playback in this browser to catch copyright blocks*
+under Settings, and the Trailer Library page plays each scanned link for a moment, muted, in a
+hidden YouTube player. **This only runs while the Trailer Library page stays open and visible
+in a browser window.** If you close it, switch tabs or the computer sleeps, testing pauses and
+continues where it left off the next time you open the page. Blocked links appear in the scan
+results as *Won't play*. Links that already failed the server check, or were tested within the
+re-check period, are skipped.
+
+**Fewer tests needed.** Playback results are shared:
+- every link tested on the Trailer Editor page (automatically or with Test) counts, and
+- with *Learn from trailers played in Emby* on (the default), a YouTube trailer that Emby
+  reports as playing is marked as working. Failed trailers never reach the server (they fail in
+  the browser), so this only finds working links. Each reported trailer play is written to the
+  Emby log as `Trailer Editor: trailer playback reported`.
 
 ## HTTP API
 
@@ -117,6 +131,8 @@ All endpoints need an administrator's API key or access token.
 | GET | `/emby/TrailerEditor/Scan` | Scan status and summary |
 | POST | `/emby/TrailerEditor/Scan` | Start a library scan |
 | POST | `/emby/TrailerEditor/Scan/Cancel` | Stop a running scan |
+| GET | `/emby/TrailerEditor/Playback/Queue?Limit=10` | Next scanned YouTube links that need a browser playback test |
+| POST | `/emby/TrailerEditor/Playback/Result?VideoId=…&Status=ok\|error\|unknown&Message=…` | Record a browser playback test result |
 | GET | `/emby/TrailerEditor/Scan/Issues?Kind=&SearchTerm=&StartIndex=0&Limit=50` | Scan results, one page at a time. `Kind`: `Unplayable`, `NoTrailers`, `InvalidLink` or `DuplicateLink` |
 
 `{Id}` is the item's id as shown in Emby web URLs (`…/item?id=12345`); item Guids also work.

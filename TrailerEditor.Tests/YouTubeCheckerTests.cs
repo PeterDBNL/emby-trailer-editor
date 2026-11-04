@@ -87,4 +87,16 @@ public class YouTubeCheckerTests
         var r = new YouTubeChecker().CheckAsync("not a link", CancellationToken.None).GetAwaiter().GetResult();
         Assert.Equal(YouTubeChecker.Error, r.Status);
     }
+
+    [Theory]
+    [InlineData("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("Trailer https://youtu.be/dQw4w9WgXcQ?t=3", "dQw4w9WgXcQ")]
+    [InlineData("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("https://youtube.com/watch?feature=x&v=dQw4w9WgXcQ", "dQw4w9WgXcQ")]
+    [InlineData("/media/movies/Movie (2001).mkv", null)]
+    [InlineData(null, null)]
+    public void FindVideoIdInAnyText(string text, string expected)
+    {
+        Assert.Equal(expected, YouTubeChecker.FindVideoId(text));
+    }
 }

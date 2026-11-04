@@ -145,6 +145,17 @@ namespace TrailerEditor.Scanning
                             continue;
                         }
 
+                        // Remembered for browser playback tests (copyright blocks).
+                        results.Links.Add(new LinkRef
+                        {
+                            VideoId = videoId,
+                            Url = normalized,
+                            ItemId = item.InternalId.ToString(),
+                            ItemName = item.Name,
+                            Year = item.ProductionYear,
+                            Type = item.GetClientTypeName()
+                        });
+
                         if (cache.TryGetValue(videoId, out var known) && known.CheckedUtc >= recheckAfter)
                         {
                             results.LinksFromCache++;
@@ -201,7 +212,9 @@ namespace TrailerEditor.Scanning
 
                         if (known != null && known.Status == YouTubeChecker.Error)
                         {
-                            results.Issues.Add(Issue(item, IssueKinds.Unplayable, normalized, known.Message));
+                            var issue = Issue(item, IssueKinds.Unplayable, normalized, known.Message);
+                            issue.VideoId = videoId;
+                            results.Issues.Add(issue);
                         }
                     }
                 }
@@ -223,7 +236,7 @@ namespace TrailerEditor.Scanning
                     .OrderBy(x => x.ItemName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(x => x.Kind)
                     .ToList();
-                store.Save(results);
+                store.SaveScan(results);
 
                 _logger.Info("Trailer Editor: scan {0}. {1} titles, {2} links ({3} checked with YouTube, {4} from earlier results), {5} issues",
                     results.Completed ? "finished" : "stopped", results.ItemsScanned, results.LinksTotal,

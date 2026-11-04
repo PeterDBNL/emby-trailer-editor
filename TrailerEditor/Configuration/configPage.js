@@ -92,7 +92,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
     // Playback results per video id, kept for an hour while the dashboard is open.
     var playResults = {};
     function rememberResult(id, result) {
-        if (result.status !== 'unknown') { playResults[id] = { time: Date.now(), result: result }; }
+        if (result.status === 'unknown') { return; }
+        playResults[id] = { time: Date.now(), result: result };
+
+        // Share the result with the library scan, so this video isn't tested again there.
+        try {
+            var url = ApiClient.getUrl('TrailerEditor/Playback/Result') + '?VideoId=' + encodeURIComponent(id) +
+                '&Status=' + encodeURIComponent(result.status) + '&Message=' + encodeURIComponent(result.text) + '&Source=editor';
+            ApiClient.ajax({ type: 'POST', url: url, dataType: 'json' }).catch(function () { /* not important */ });
+        } catch (e) { /* not important */ }
     }
     function knownResult(id) {
         var entry = playResults[id];

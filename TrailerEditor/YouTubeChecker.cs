@@ -59,6 +59,22 @@ namespace TrailerEditor
             _http.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", "SOCS=CAI; CONSENT=YES+1");
         }
 
+        private static readonly Regex AnyYouTubeLink = new Regex(
+            @"(?:youtube(?:-nocookie)?\.com/(?:watch\?(?:[^\s""]*&)?v=|embed/|shorts/|v/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>Finds a YouTube video id in any text that contains a YouTube link, or null.</summary>
+        public static string FindVideoId(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return null;
+            }
+
+            var match = AnyYouTubeLink.Match(text);
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
         /// <summary>Video id of a normalized https://www.youtube.com/watch?v= link, or null.</summary>
         public static string VideoIdOf(string normalizedUrl)
         {

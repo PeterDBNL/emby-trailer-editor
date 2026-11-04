@@ -19,7 +19,22 @@ namespace TrailerEditor.Scanning
         public string Type { get; set; }
         public string Kind { get; set; }
         public string Url { get; set; }
+        public string VideoId { get; set; }
         public string Message { get; set; }
+
+        /// <summary>True when found by a browser playback test rather than the server check.</summary>
+        public bool FromPlaybackTest { get; set; }
+    }
+
+    /// <summary>A YouTube trailer link found by the last scan, used for browser playback tests.</summary>
+    public class LinkRef
+    {
+        public string VideoId { get; set; }
+        public string Url { get; set; }
+        public string ItemId { get; set; }
+        public string ItemName { get; set; }
+        public int? Year { get; set; }
+        public string Type { get; set; }
     }
 
     public class CachedLinkResult
@@ -28,6 +43,9 @@ namespace TrailerEditor.Scanning
         public string Status { get; set; }
         public string Message { get; set; }
         public DateTime CheckedUtc { get; set; }
+
+        /// <summary>For playback results: "browser" (library page), "editor" or "emby" (a real trailer play).</summary>
+        public string Source { get; set; }
     }
 
     public class ScanResults
@@ -50,5 +68,11 @@ namespace TrailerEditor.Scanning
 
         public List<ScanIssue> Issues { get; set; } = new List<ScanIssue>();
         public List<CachedLinkResult> LinkCache { get; set; } = new List<CachedLinkResult>();
+
+        /// <summary>YouTube links found by the last scan (one per title and video).</summary>
+        public List<LinkRef> Links { get; set; } = new List<LinkRef>();
+
+        /// <summary>Results of playback tests in a browser, and of trailers seen playing in Emby. Kept across scans.</summary>
+        public List<CachedLinkResult> PlaybackCache { get; set; } = new List<CachedLinkResult>();
     }
 }

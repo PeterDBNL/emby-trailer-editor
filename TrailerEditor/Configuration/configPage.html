@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Trailer Editor</title>
+</head>
+<body>
+    <div id="trailerEditorPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-checkbox"
+         data-controller="__plugin/trailereditorjs">
+        <div data-role="content">
+            <div class="content-primary">
+
+                <style>
+                    #trailerEditorPage .te-row { display: flex; align-items: center; gap: .5em; margin-bottom: .6em; flex-wrap: wrap; }
+                    #trailerEditorPage .te-row .inputContainer { flex: 1 1 18em; margin: 0; }
+                    #trailerEditorPage .te-thumb { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; background: rgba(128,128,128,.2); flex: none; }
+                    #trailerEditorPage .te-result { display: flex; align-items: center; justify-content: space-between; gap: .5em; padding: .6em .8em; border-radius: 6px; cursor: pointer; background: rgba(128,128,128,.08); margin-bottom: .4em; }
+                    #trailerEditorPage .te-result:hover { background: rgba(128,128,128,.18); }
+                    #trailerEditorPage .te-meta { opacity: .7; font-size: .9em; }
+                    #trailerEditorPage .te-badge { font-size: .8em; padding: .1em .5em; border-radius: 1em; background: rgba(82,181,75,.25); white-space: nowrap; }
+                    #trailerEditorPage .te-msg { margin: .8em 0; padding: .6em .8em; border-radius: 6px; display: none; }
+                    #trailerEditorPage .te-msg.ok { display: block; background: rgba(82,181,75,.2); }
+                    #trailerEditorPage .te-msg.err { display: block; background: rgba(204,51,51,.25); }
+                    #trailerEditorPage .te-section { margin-top: 2em; }
+                    #trailerEditorPage .te-buttons { display: flex; gap: .5em; flex-wrap: wrap; margin-top: 1em; }
+                    #trailerEditorPage .te-buttons .raised { margin: 0; }
+                </style>
+
+                <h2 class="sectionTitle">Trailer Editor</h2>
+                <p class="fieldDescription">
+                    Find a movie or TV show, then add, change or remove its trailer links.
+                    You can paste a full YouTube link or just the video id.
+                </p>
+
+                <div class="te-msg"></div>
+
+                <form class="te-searchForm">
+                    <div class="te-row">
+                        <div class="inputContainer">
+                            <input is="emby-input" type="text" class="te-searchTerm" label="Movie or TV show name" autocomplete="off" />
+                        </div>
+                        <button is="emby-button" type="submit" class="raised button-submit"><span>Search</span></button>
+                    </div>
+                </form>
+                <div class="te-results"></div>
+
+                <div class="te-editor te-section" style="display:none;">
+                    <h3 class="sectionTitle te-editorTitle"></h3>
+                    <div class="te-links"></div>
+                    <button is="emby-button" type="button" class="raised te-add"><span>Add trailer link</span></button>
+
+                    <div class="checkboxContainer" style="margin-top:1.2em;">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" class="te-pin" checked />
+                            <span>Pin these links (put them back if a metadata refresh replaces them)</span>
+                        </label>
+                    </div>
+
+                    <div class="te-buttons">
+                        <button is="emby-button" type="button" class="raised button-submit te-save"><span>Save</span></button>
+                        <button is="emby-button" type="button" class="raised te-unpin"><span>Unpin</span></button>
+                        <button is="emby-button" type="button" class="raised te-cancel"><span>Close</span></button>
+                    </div>
+                </div>
+
+                <div class="te-section">
+                    <h3 class="sectionTitle">Pinned items</h3>
+                    <div class="te-pinned"><p class="te-meta">Loading…</p></div>
+                </div>
+
+                <div class="te-section">
+                    <h3 class="sectionTitle">Settings</h3>
+                    <div class="checkboxContainer">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" class="te-pinEnabled" />
+                            <span>Restore pinned trailer links after metadata refreshes</span>
+                        </label>
+                        <div class="fieldDescription">Turn this off to stop the plugin from re-applying pinned links. Your saved pins are kept.</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</body>
+</html>

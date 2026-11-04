@@ -91,7 +91,7 @@ namespace TrailerEditor
             if (result.Status == null)
             {
                 result.Status = Ok;
-                result.Message = "Should play in Emby.";
+                result.Message = "No problems found. Press Test to be sure: copyright blocks only show up there.";
             }
 
             if (result.Status != Unknown)

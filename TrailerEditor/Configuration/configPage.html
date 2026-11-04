@@ -27,6 +27,9 @@
                     #trailerEditorPage .te-check-ok { color: #52b54b; }
                     #trailerEditorPage .te-check-error { color: #e05252; }
                     #trailerEditorPage .te-check-unknown, #trailerEditorPage .te-check-pending { opacity: .7; }
+                    #trailerEditorPage .te-testPanel { margin: .5em 0 1.2em; padding: .8em; border-radius: 6px; background: rgba(128,128,128,.08); }
+                    #trailerEditorPage .te-testIframe { display: block; width: 100%; max-width: 640px; aspect-ratio: 16 / 9; border: 0; margin: .5em 0; background: #000; }
+                    #trailerEditorPage .te-testResult { margin-bottom: .6em; }
                     @media (max-width: 600px) { #trailerEditorPage .te-check { margin-left: 0; } }
                     #trailerEditorPage .te-buttons { display: flex; gap: .5em; flex-wrap: wrap; margin-top: 1em; }
                     #trailerEditorPage .te-buttons .raised { margin: 0; }
@@ -36,7 +39,7 @@
                 <p class="fieldDescription">
                     Find a movie or TV show, then add, change or remove its trailer links.
                     You can paste a full YouTube link or just the video id.
-                    Each YouTube link is checked to see whether it will play in Emby.
+                    Each YouTube link is checked to see whether it will play in Emby; press Test to try it in the same kind of player Emby uses.
                 </p>
 
                 <div class="te-msg"></div>
@@ -54,6 +57,12 @@
                 <div class="te-editor te-section" style="display:none;">
                     <h3 class="sectionTitle te-editorTitle"></h3>
                     <div class="te-links"></div>
+                    <div class="te-testPanel" style="display:none;">
+                        <div class="te-meta te-testTitle"></div>
+                        <div class="te-testFrame"></div>
+                        <div class="te-testResult"></div>
+                        <button is="emby-button" type="button" class="raised te-testClose"><span>Close test</span></button>
+                    </div>
                     <button is="emby-button" type="button" class="raised te-add"><span>Add trailer link</span></button>
 
                     <div class="checkboxContainer" style="margin-top:1.2em;">

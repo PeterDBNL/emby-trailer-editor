@@ -21,6 +21,22 @@ Emby's built-in metadata editor doesn't let you change these links. This plugin 
 
 Requires Emby Server **4.8 or newer**.
 
+## Screenshots
+
+**Trailer Editor**: edit a title's trailer links. Each link is checked automatically, and
+*Test* plays it in the same kind of player Emby uses. *Search YouTube* helps find a new one.
+
+![Trailer Editor page](docs/screenshots/editor.png)
+
+**Trailer Library**: scan the whole library, or part of it (type, title range, recently
+added), with live progress for both steps.
+
+![Library scan in progress](docs/screenshots/library-scan.png)
+
+**Scan results**: every problem found, with the reason, and an *Edit trailers* button to fix it.
+
+![Scan results](docs/screenshots/scan-results.png)
+
 ## Install
 
 1. Get `TrailerEditor.dll`:

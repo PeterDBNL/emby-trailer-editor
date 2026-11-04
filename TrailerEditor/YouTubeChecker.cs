@@ -18,6 +18,9 @@ namespace TrailerEditor
         public string Title { get; set; }
         public string Channel { get; set; }
         public string Message { get; set; }
+
+        /// <summary>True when YouTube answered "too many requests".</summary>
+        public bool RateLimited { get; set; }
     }
 
     /// <summary>
@@ -56,7 +59,23 @@ namespace TrailerEditor
             _http.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", "SOCS=CAI; CONSENT=YES+1");
         }
 
-        public async Task<LinkCheckResult> CheckAsync(string input, CancellationToken cancellationToken)
+        /// <summary>Video id of a normalized https://www.youtube.com/watch?v= link, or null.</summary>
+        public static string VideoIdOf(string normalizedUrl)
+        {
+            if (normalizedUrl == null || !normalizedUrl.StartsWith("https://www.youtube.com/watch?v=", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var match = VideoIdRegex.Match(normalizedUrl);
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
+        public Task<LinkCheckResult> CheckAsync(string input, CancellationToken cancellationToken) =>
+            CheckAsync(input, true, cancellationToken);
+
+        /// <param name="checkWatchPage">Also read the watch page to detect age restrictions (one extra request).</param>
+        public virtual async Task<LinkCheckResult> CheckAsync(string input, bool checkWatchPage, CancellationToken cancellationToken)
         {
             string url;
             try
@@ -75,7 +94,7 @@ namespace TrailerEditor
             }
 
             var id = match.Groups[1].Value;
-            if (_cache.TryGetValue(id, out var cached) && DateTime.UtcNow - cached.Item1 < CacheTime)
+            if (checkWatchPage && _cache.TryGetValue(id, out var cached) && DateTime.UtcNow - cached.Item1 < CacheTime)
             {
                 return cached.Item2;
             }
@@ -83,7 +102,7 @@ namespace TrailerEditor
             var result = new LinkCheckResult { Url = url, VideoId = id };
             await CheckOEmbedAsync(result, cancellationToken).ConfigureAwait(false);
 
-            if (result.Status != Error)
+            if (result.Status != Error && checkWatchPage && !result.RateLimited)
             {
                 await CheckWatchPageAsync(result, cancellationToken).ConfigureAwait(false);
             }
@@ -94,7 +113,7 @@ namespace TrailerEditor
                 result.Message = "No problems found.";
             }
 
-            if (result.Status != Unknown)
+            if (result.Status != Unknown && checkWatchPage)
             {
                 _cache[id] = Tuple.Create(DateTime.UtcNow, result);
             }
@@ -128,11 +147,20 @@ namespace TrailerEditor
                         result.Title = JsonString(json, "title");
                         result.Channel = JsonString(json, "author_name");
                     }
+                    else if (code == 429)
+                    {
+                        result.RateLimited = true;
+                        SetUnknown(result, "YouTube is limiting requests right now.");
+                    }
                     else
                     {
                         SetUnknown(result, "YouTube returned an unexpected response (HTTP " + code + ").");
                     }
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception)
             {

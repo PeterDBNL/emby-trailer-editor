@@ -11,6 +11,26 @@ namespace TrailerEditor.Configuration
         public bool PinEditedTrailers { get; set; } = true;
 
         public TrailerOverride[] Overrides { get; set; } = new TrailerOverride[0];
+
+        // ---- Library scan ----
+
+        /// <summary>Report movies and TV shows that have no online trailer links.</summary>
+        public bool ScanReportNoTrailers { get; set; } = true;
+
+        /// <summary>Don't report "no trailers" for items that have local trailer files.</summary>
+        public bool ScanIgnoreItemsWithLocalTrailers { get; set; } = true;
+
+        /// <summary>Ask YouTube whether each trailer link still works.</summary>
+        public bool ScanCheckLinks { get; set; } = true;
+
+        /// <summary>Also detect age-restricted videos (one extra request per link).</summary>
+        public bool ScanCheckAgeRestriction { get; set; } = false;
+
+        /// <summary>Pause between YouTube requests, to avoid being rate limited.</summary>
+        public int ScanRequestDelayMs { get; set; } = 1000;
+
+        /// <summary>Re-use a link's previous result for this many days before checking it again.</summary>
+        public int ScanRecheckDays { get; set; } = 30;
     }
 
     public class TrailerOverride

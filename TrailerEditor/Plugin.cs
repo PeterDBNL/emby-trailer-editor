@@ -42,6 +42,19 @@ namespace TrailerEditor
                 {
                     Name = "trailereditorjs",
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.js"
+                },
+                new PluginPageInfo
+                {
+                    Name = "trailereditorlibrary",
+                    DisplayName = "Trailer Library",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.libraryPage.html",
+                    EnableInMainMenu = true,
+                    MenuIcon = "video_library"
+                },
+                new PluginPageInfo
+                {
+                    Name = "trailereditorlibraryjs",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.libraryPage.js"
                 }
             };
         }

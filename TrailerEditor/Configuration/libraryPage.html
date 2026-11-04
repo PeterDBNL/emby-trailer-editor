@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Trailer Library</title>
+</head>
+<body>
+    <div id="trailerLibraryPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-checkbox,emby-select"
+         data-controller="__plugin/trailereditorlibraryjs">
+        <div data-role="content">
+            <div class="content-primary">
+
+                <style>
+                    #trailerLibraryPage .tl-nav { display: flex; align-items: center; justify-content: space-between; gap: 1em; flex-wrap: wrap; margin-bottom: 1em; }
+                    #trailerLibraryPage .tl-nav a { margin: 0; }
+                    #trailerLibraryPage .tl-meta { opacity: .7; font-size: .9em; }
+                    #trailerLibraryPage .tl-box { padding: .8em 1em; border-radius: 6px; background: rgba(128,128,128,.08); margin-bottom: 1em; }
+                    #trailerLibraryPage .tl-buttons { display: flex; gap: .5em; flex-wrap: wrap; margin-top: .8em; }
+                    #trailerLibraryPage .tl-buttons .raised { margin: 0; }
+                    #trailerLibraryPage .tl-bar { height: 6px; border-radius: 3px; background: rgba(128,128,128,.25); overflow: hidden; margin: .6em 0; }
+                    #trailerLibraryPage .tl-bar > div { height: 100%; width: 0; background: #52b54b; transition: width .4s; }
+                    #trailerLibraryPage .tl-note { margin-top: .6em; color: #e0a030; }
+                    #trailerLibraryPage .tl-chips { display: flex; gap: .5em; flex-wrap: wrap; margin-top: .6em; }
+                    #trailerLibraryPage .tl-chip { padding: .25em .7em; border-radius: 1em; background: rgba(128,128,128,.18); cursor: pointer; font-size: .9em; border: 0; color: inherit; font: inherit; }
+                    #trailerLibraryPage .tl-chip:hover { background: rgba(128,128,128,.3); }
+                    #trailerLibraryPage details { border-radius: 6px; background: rgba(128,128,128,.05); margin-bottom: 1em; }
+                    #trailerLibraryPage summary { cursor: pointer; padding: .8em 1em; font-weight: 600; font-size: 1.1em; list-style-position: inside; }
+                    #trailerLibraryPage .tl-body { padding: 0 1em 1em; }
+                    #trailerLibraryPage .tl-filters { display: flex; gap: .8em; flex-wrap: wrap; align-items: flex-end; margin-bottom: .6em; }
+                    #trailerLibraryPage .tl-filters .inputContainer, #trailerLibraryPage .tl-filters .selectContainer { flex: 1 1 14em; margin: 0; }
+                    #trailerLibraryPage .tl-row { display: block; padding: .6em .8em; border-radius: 6px; background: rgba(128,128,128,.08); margin-bottom: .4em; color: inherit; text-decoration: none; }
+                    #trailerLibraryPage .tl-row:hover { background: rgba(128,128,128,.18); }
+                    #trailerLibraryPage .tl-issue { font-size: .9em; margin-top: .15em; }
+                    #trailerLibraryPage .tl-kind-Unplayable, #trailerLibraryPage .tl-kind-InvalidLink { color: #e05252; }
+                    #trailerLibraryPage .tl-kind-DuplicateLink { color: #e0a030; }
+                    #trailerLibraryPage .tl-url { font-size: .85em; opacity: .7; word-break: break-all; }
+                    #trailerLibraryPage .tl-pager { display: flex; align-items: center; gap: .8em; margin-top: .6em; flex-wrap: wrap; }
+                    #trailerLibraryPage .tl-pager .raised { margin: 0; }
+                    #trailerLibraryPage .tl-settings .inputContainer { max-width: 20em; }
+                </style>
+
+                <div class="tl-nav">
+                    <h2 class="sectionTitle" style="margin:0;">Trailer Library</h2>
+                    <a is="emby-linkbutton" class="raised" href="#!/configurationpage?name=trailereditor"><span>Trailer Editor</span></a>
+                </div>
+
+                <div class="tl-box">
+                    <h3 style="margin:0 0 .3em;">Library scan</h3>
+                    <div class="tl-status">Loading…</div>
+                    <div class="tl-bar" style="display:none;"><div></div></div>
+                    <div class="tl-note" style="display:none;"></div>
+                    <div class="tl-chips"></div>
+                    <div class="tl-buttons">
+                        <button is="emby-button" type="button" class="raised button-submit tl-scan"><span>Scan now</span></button>
+                        <button is="emby-button" type="button" class="raised tl-cancel" style="display:none;"><span>Stop scan</span></button>
+                    </div>
+                    <div class="fieldDescription" style="margin-top:.8em;">
+                        The scan also runs weekly; change that under <em>Scheduled Tasks → Trailer Editor</em>.
+                        Copyright blocks can only be detected in a browser, so the Trailer Editor page still tests each link when you open a title.
+                    </div>
+                </div>
+
+                <details class="tl-issuesSection">
+                    <summary>Scan results <span class="tl-issuesCount"></span></summary>
+                    <div class="tl-body">
+                        <div class="tl-filters">
+                            <div class="selectContainer">
+                                <select is="emby-select" class="tl-kind" label="Show">
+                                    <option value="">All problems</option>
+                                    <option value="Unplayable">Won't play</option>
+                                    <option value="NoTrailers">No trailers</option>
+                                    <option value="InvalidLink">Invalid link</option>
+                                    <option value="DuplicateLink">Duplicate link</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <input is="emby-input" type="search" class="tl-issueSearch" label="Filter by title" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="tl-issues"></div>
+                        <div class="tl-pager tl-issuesPager"></div>
+                    </div>
+                </details>
+
+                <details class="tl-pinnedSection">
+                    <summary>Pinned items <span class="tl-pinnedCount"></span></summary>
+                    <div class="tl-body">
+                        <div class="tl-filters">
+                            <div class="inputContainer">
+                                <input is="emby-input" type="search" class="tl-pinnedSearch" label="Filter by title" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="tl-pinned"></div>
+                        <div class="tl-pager tl-pinnedPager"></div>
+                    </div>
+                </details>
+
+                <details class="tl-settingsSection">
+                    <summary>Settings</summary>
+                    <div class="tl-body tl-settings">
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-PinEditedTrailers" />
+                                <span>Restore pinned trailer links after metadata refreshes</span>
+                            </label>
+                            <div class="fieldDescription">Turn this off to stop re-applying pinned links. Your pins are kept.</div>
+                        </div>
+
+                        <h3>Library scan</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-ScanReportNoTrailers" />
+                                <span>Report movies and TV shows without trailers</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-ScanIgnoreItemsWithLocalTrailers" />
+                                <span>…but not when they have local trailer files</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-ScanCheckLinks" />
+                                <span>Check with YouTube that each trailer link still works</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-ScanCheckAgeRestriction" />
+                                <span>Also detect age-restricted videos (twice as many requests to YouTube)</span>
+                            </label>
+                        </div>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="number" min="0" max="60000" step="100" class="tl-ScanRequestDelayMs" label="Pause between YouTube requests (milliseconds)" />
+                            <div class="fieldDescription">Slows the scan down so YouTube doesn't block it. 1000 = about 3,600 links an hour.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <input is="emby-input" type="number" min="0" max="365" step="1" class="tl-ScanRecheckDays" label="Re-check a link after this many days" />
+                            <div class="fieldDescription">Links checked more recently reuse their last result, so weekly scans stay quick. 0 = check every link every time.</div>
+                        </div>
+                        <button is="emby-button" type="button" class="raised button-submit tl-saveSettings"><span>Save settings</span></button>
+                        <div class="tl-settingsMsg tl-meta" style="margin-top:.6em;"></div>
+                    </div>
+                </details>
+
+            </div>
+        </div>
+    </div>
+</body>
+</html>

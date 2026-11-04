@@ -1,8 +1,6 @@
 define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (BaseView, loading) {
     'use strict';
 
-    var pluginId = '6f1d7a7e-3c1b-4f4e-9b8a-2d5c0e7a91b4';
-
     function escapeHtml(value) {
         return String(value == null ? '' : value)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -403,14 +401,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             });
         }
 
-        function loadPinned() {
-            api('GET', 'TrailerEditor/Pinned').then(function (items) {
-                renderList(q('.te-pinned'), items, 'No pinned items yet.');
-            }, function () {
-                q('.te-pinned').innerHTML = '<p class="te-meta">Could not load pinned items.</p>';
-            });
-        }
-
         function search(term) {
             if (!term) { q('.te-results').innerHTML = ''; return; }
             loading.show();
@@ -443,7 +433,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                     loading.hide();
                     openEditor(item);
                     showMessage('Saved ' + item.TrailerUrls.length + ' trailer link(s) for ' + item.Name + '.', false);
-                    loadPinned();
                 }, function (err) {
                     loading.hide();
                     errorText(err, 'Saving failed. Check the links and try again.').then(function (t) { showMessage(t, true); });
@@ -457,7 +446,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 loading.hide();
                 openEditor(item);
                 showMessage('Unpinned ' + item.Name + '. Its links stay as they are, but a metadata refresh may now replace them.', false);
-                loadPinned();
             }, function (err) {
                 loading.hide();
                 errorText(err, 'Unpin failed.').then(function (t) { showMessage(t, true); });
@@ -475,29 +463,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             if (row) { loadItem(row.getAttribute('data-id')); }
         }
         q('.te-results').addEventListener('click', onListClick);
-        q('.te-pinned').addEventListener('click', onListClick);
 
         q('.te-add').addEventListener('click', function () { addLinkRow('').focus(); });
         q('.te-save').addEventListener('click', save);
         q('.te-unpin').addEventListener('click', unpin);
         q('.te-cancel').addEventListener('click', closeEditor);
 
-        q('.te-pinEnabled').addEventListener('change', function () {
-            var checked = this.checked;
-            loading.show();
-            ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-                config.PinEditedTrailers = checked;
-                return ApiClient.updatePluginConfiguration(pluginId, config);
-            }).then(function () {
-                loading.hide();
-                showMessage(checked ? 'Pinned links will be restored after refreshes.' : 'Pinned links will no longer be restored.', false);
-            }, function () {
-                loading.hide();
-                showMessage('Could not save the setting.', true);
-            });
-        });
-
-        this.loadPinned = loadPinned;
         this.loadItem = loadItem;
         this.stopTest = stopTest;
 
@@ -511,17 +482,16 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         this.stopTest();
     };
 
+    // Item id from the view params, or from the address (…/configurationpage?name=trailereditor&id=123).
+    function idFromAddress(params) {
+        if (params && params.id) { return params.id; }
+        var m = /[?&]id=([^&#]+)/.exec(window.location.hash || '') || /[?&]id=([^&#]+)/.exec(window.location.search || '');
+        return m ? decodeURIComponent(m[1]) : null;
+    }
+
     View.prototype.onResume = function (options) {
         BaseView.prototype.onResume.apply(this, arguments);
-        var view = this.view;
-
-        ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-            view.querySelector('.te-pinEnabled').checked = config.PinEditedTrailers !== false;
-        });
-        this.loadPinned();
-
-        // Allow deep links such as .../configurationpage?name=trailereditor&id=12345
-        var id = this.params && this.params.id;
+        var id = idFromAddress(this.params);
         if (id) { this.loadItem(id); }
     };
 

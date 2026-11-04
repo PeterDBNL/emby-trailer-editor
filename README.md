@@ -13,6 +13,8 @@ Emby's built-in metadata editor doesn't let you change these links. This plugin 
   `https://www.youtube.com/watch?v=ID` link that Emby apps can play
 - see right away whether each YouTube link will actually **play in Emby** (see below)
 - **pin** your links so a metadata refresh (e.g. "Replace all metadata") can't overwrite them
+- **scan your whole library** for titles without trailers and trailer links that are broken
+  or won't play
 
 Requires Emby Server **4.8 or newer**.
 
@@ -68,10 +70,37 @@ metadata refresh can replace your edits with whatever the metadata provider retu
 When **Pin these links** is ticked on save (the default), the plugin remembers your links
 and puts them back automatically if a refresh changes them.
 
-- Pinned items are listed on the Trailer Editor page.
-- **Unpin** keeps the current links but stops protecting them.
-- The *Restore pinned trailer links after metadata refreshes* setting turns the
-  protection off for all items without forgetting your pins.
+Pinned items are listed on the **Trailer Library** page (see below). **Unpin** in the editor
+keeps the current links but stops protecting them.
+
+### Trailer Library page
+
+Open it from the side menu, or with the *Library scan & pinned items* button on the
+Trailer Editor page. It has:
+
+- **Library scan**: goes through every movie and TV show and reports
+  - *Won't play*: YouTube links that are deleted, private, have embedding turned off, or
+    (optionally) are age-restricted
+  - *No trailers*: titles without trailer links (optionally ignoring titles that have local
+    trailer files)
+  - *Invalid link* and *Duplicate link*
+
+  Press **Scan now**, or let it run on its weekly schedule (change it under
+  *Scheduled Tasks → Trailer Editor → Scan trailer links*). Progress is shown on the page and
+  in Scheduled Tasks. Click the summary buttons to filter the results, and click a title to
+  open it in the editor. Saving a title in the editor removes its results until the next scan.
+- **Scan results**, **Pinned items** and **Settings**: collapsible sections. The lists load
+  only when opened, are searchable by title and are paged 50 at a time, so they stay fast
+  with tens of thousands of titles.
+
+**Large libraries.** The scan pauses between YouTube requests (1 second by default, about
+3,600 links an hour) so YouTube doesn't block your server. A link's result is reused for 30
+days, so after the first full scan, weekly scans only check new and older links. If YouTube
+starts refusing requests, the scan slows down, and after 25 failures in a row it stops checking
+links for that run and says so. All of this can be changed under *Settings*.
+
+Copyright blocks can only be detected by a browser, so the scan can't find them. The Trailer
+Editor still tests every link when you open a title.
 
 ## HTTP API
 
@@ -84,7 +113,11 @@ All endpoints need an administrator's API key or access token.
 | POST | `/emby/TrailerEditor/Items/{Id}?Urls=…&Pin=true` | Replace the links. `Urls` is the links separated by spaces (URL-encoded). To remove all trailers send `Clear=true` instead of `Urls` |
 | GET | `/emby/TrailerEditor/Check?Url=…` | Check whether a link will play in Emby |
 | DELETE | `/emby/TrailerEditor/Items/{Id}/Pin` | Unpin an item |
-| GET | `/emby/TrailerEditor/Pinned` | List pinned items |
+| GET | `/emby/TrailerEditor/Pinned?SearchTerm=&StartIndex=0&Limit=50` | List pinned items, one page at a time |
+| GET | `/emby/TrailerEditor/Scan` | Scan status and summary |
+| POST | `/emby/TrailerEditor/Scan` | Start a library scan |
+| POST | `/emby/TrailerEditor/Scan/Cancel` | Stop a running scan |
+| GET | `/emby/TrailerEditor/Scan/Issues?Kind=&SearchTerm=&StartIndex=0&Limit=50` | Scan results, one page at a time. `Kind`: `Unplayable`, `NoTrailers`, `InvalidLink` or `DuplicateLink` |
 
 `{Id}` is the item's id as shown in Emby web URLs (`…/item?id=12345`); item Guids also work.
 

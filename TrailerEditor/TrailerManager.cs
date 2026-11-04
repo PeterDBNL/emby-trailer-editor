@@ -82,6 +82,9 @@ namespace TrailerEditor
                 Plugin.Instance.SaveConfiguration();
             }
 
+            // The item was just fixed (or changed); the next scan will look at it again.
+            EntryPoint.Store?.RemoveIssuesFor(item.InternalId.ToString());
+
             return normalized;
         }
 
@@ -125,7 +128,22 @@ namespace TrailerEditor
             return true;
         }
 
-        public IEnumerable<BaseItem> GetPinnedItems()
+        public int PinnedCount
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return (Config.Overrides ?? new TrailerOverride[0]).Length;
+                }
+            }
+        }
+
+        /// <summary>
+        /// One page of pinned items, sorted by name. Filtering and paging use the names
+        /// stored with the pins, so only the items on the page are loaded.
+        /// </summary>
+        public List<BaseItem> GetPinnedPage(string searchTerm, int startIndex, int limit, out int total)
         {
             TrailerOverride[] overrides;
             lock (_lock)
@@ -133,17 +151,30 @@ namespace TrailerEditor
                 overrides = (Config.Overrides ?? new TrailerOverride[0]).ToArray();
             }
 
-            foreach (var o in overrides)
+            IEnumerable<TrailerOverride> query = overrides;
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var term = searchTerm.Trim();
+                query = query.Where(o => (o.ItemName ?? string.Empty).IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            var matches = query.OrderBy(o => o.ItemName ?? string.Empty, StringComparer.OrdinalIgnoreCase).ToList();
+            total = matches.Count;
+
+            var page = new List<BaseItem>();
+            foreach (var o in matches.Skip(Math.Max(0, startIndex)).Take(Math.Max(1, limit)))
             {
                 if (Guid.TryParse(o.ItemId, out var guid))
                 {
                     var item = _libraryManager.GetItemById(guid);
                     if (item != null)
                     {
-                        yield return item;
+                        page.Add(item);
                     }
                 }
             }
+
+            return page;
         }
 
         private static string Key(BaseItem item) => item.Id.ToString("N");

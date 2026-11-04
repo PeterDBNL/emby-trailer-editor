@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Serialization;
+using TrailerEditor.Scanning;
 
 namespace TrailerEditor
 {
@@ -17,16 +20,20 @@ namespace TrailerEditor
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<Guid, byte> _inProgress = new ConcurrentDictionary<Guid, byte>();
 
-        public EntryPoint(ILibraryManager libraryManager, ILogManager logManager)
+        public EntryPoint(ILibraryManager libraryManager, ILogManager logManager, IApplicationPaths applicationPaths, IJsonSerializer json)
         {
             _libraryManager = libraryManager;
             _logger = logManager.GetLogger("TrailerEditor");
+            Store = new ScanStore(applicationPaths, json, _logger);
             Manager = new TrailerManager(libraryManager, _logger);
         }
 
+        /// <summary>Results of the last library scan.</summary>
+        public static ScanStore Store { get; private set; }
+
         public static TrailerManager Manager { get; private set; }
 
-        public static YouTubeChecker Checker { get; } = new YouTubeChecker();
+        public static YouTubeChecker Checker { get; internal set; } = new YouTubeChecker();
 
         public void Run()
         {

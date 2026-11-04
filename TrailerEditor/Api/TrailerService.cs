@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,8 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
+using MediaBrowser.Model.Tasks;
+using TrailerEditor.Scanning;
 
 namespace TrailerEditor.Api
 {
@@ -32,9 +35,73 @@ namespace TrailerEditor.Api
         public int? Limit { get; set; }
     }
 
-    [Route("/TrailerEditor/Pinned", "GET", Summary = "Lists items whose trailer links are pinned")]
-    public class GetPinned : IReturn<TrailerItemInfo[]>
+    public class TrailerItemPage
     {
+        public TrailerItemInfo[] Items { get; set; }
+        public int TotalRecordCount { get; set; }
+    }
+
+    public class ScanIssuePage
+    {
+        public ScanIssue[] Items { get; set; }
+        public int TotalRecordCount { get; set; }
+    }
+
+    public class ScanStatus
+    {
+        /// <summary>Idle, Running or Cancelling.</summary>
+        public string State { get; set; }
+        public double? Progress { get; set; }
+        public bool HasResults { get; set; }
+        public DateTime? StartedUtc { get; set; }
+        public DateTime? FinishedUtc { get; set; }
+        public bool Completed { get; set; }
+        public int ItemsScanned { get; set; }
+        public int ItemsTotal { get; set; }
+        public int LinksTotal { get; set; }
+        public int LinksChecked { get; set; }
+        public int LinksFromCache { get; set; }
+        public int LinksNotChecked { get; set; }
+        public string Note { get; set; }
+        public int IssueCount { get; set; }
+        public int NoTrailersCount { get; set; }
+        public int UnplayableCount { get; set; }
+        public int InvalidLinkCount { get; set; }
+        public int DuplicateLinkCount { get; set; }
+        public int PinnedCount { get; set; }
+    }
+
+    [Route("/TrailerEditor/Pinned", "GET", Summary = "Lists items whose trailer links are pinned, one page at a time")]
+    public class GetPinned : IReturn<TrailerItemPage>
+    {
+        public string SearchTerm { get; set; }
+        public int? StartIndex { get; set; }
+        public int? Limit { get; set; }
+    }
+
+    [Route("/TrailerEditor/Scan", "GET", Summary = "Gets the state and summary of the library scan")]
+    public class GetScanStatus : IReturn<ScanStatus>
+    {
+    }
+
+    [Route("/TrailerEditor/Scan", "POST", Summary = "Starts a library scan")]
+    public class StartScan : IReturn<ScanStatus>
+    {
+    }
+
+    [Route("/TrailerEditor/Scan/Cancel", "POST", Summary = "Stops a running library scan")]
+    public class CancelScan : IReturn<ScanStatus>
+    {
+    }
+
+    [Route("/TrailerEditor/Scan/Issues", "GET", Summary = "Lists problems found by the last library scan, one page at a time")]
+    public class GetScanIssues : IReturn<ScanIssuePage>
+    {
+        /// <summary>NoTrailers, Unplayable, InvalidLink or DuplicateLink. Empty for all.</summary>
+        public string Kind { get; set; }
+        public string SearchTerm { get; set; }
+        public int? StartIndex { get; set; }
+        public int? Limit { get; set; }
     }
 
     [Route("/TrailerEditor/Items/{Id}", "GET", Summary = "Gets the trailer links of an item")]
@@ -79,9 +146,11 @@ namespace TrailerEditor.Api
     {
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
+        private readonly ITaskManager _taskManager;
 
-        public TrailerService(ILibraryManager libraryManager, ILogManager logManager)
+        public TrailerService(ILibraryManager libraryManager, ILogManager logManager, ITaskManager taskManager)
         {
+            _taskManager = taskManager;
             _libraryManager = libraryManager;
             _logger = logManager.GetLogger("TrailerEditor");
         }
@@ -110,7 +179,77 @@ namespace TrailerEditor.Api
 
         public object Get(GetPinned request)
         {
-            return Manager.GetPinnedItems().Select(ToInfo).OrderBy(i => i.Name).ToArray();
+            var page = Manager.GetPinnedPage(request.SearchTerm, request.StartIndex ?? 0, PageSize(request.Limit), out var total);
+            return new TrailerItemPage { Items = page.Select(ToInfo).ToArray(), TotalRecordCount = total };
+        }
+
+        public object Get(GetScanStatus request) => BuildStatus();
+
+        public object Post(StartScan request)
+        {
+            _taskManager.QueueIfNotRunning<TrailerScanTask>();
+            return BuildStatus();
+        }
+
+        public object Post(CancelScan request)
+        {
+            _taskManager.CancelIfRunning<TrailerScanTask>();
+            return BuildStatus();
+        }
+
+        public object Get(GetScanIssues request)
+        {
+            IEnumerable<ScanIssue> issues = EntryPoint.Store.GetIssues();
+            if (!string.IsNullOrWhiteSpace(request.Kind))
+            {
+                issues = issues.Where(i => string.Equals(i.Kind, request.Kind, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+            {
+                var term = request.SearchTerm.Trim();
+                issues = issues.Where(i => (i.ItemName ?? string.Empty).IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            var list = issues.ToList();
+            return new ScanIssuePage
+            {
+                Items = list.Skip(Math.Max(0, request.StartIndex ?? 0)).Take(PageSize(request.Limit)).ToArray(),
+                TotalRecordCount = list.Count
+            };
+        }
+
+        private static int PageSize(int? limit) => Math.Max(1, Math.Min(limit ?? 50, 200));
+
+        private ScanStatus BuildStatus()
+        {
+            var worker = _taskManager.ScheduledTasks.FirstOrDefault(t => t.ScheduledTask is TrailerScanTask);
+            var results = EntryPoint.Store.Current;
+            var issues = results.Issues ?? new List<ScanIssue>();
+            var state = worker?.State.ToString() ?? "Idle";
+
+            return new ScanStatus
+            {
+                State = state,
+                Progress = state == "Idle" ? null : worker?.CurrentProgress,
+                HasResults = results.StartedUtc != null,
+                StartedUtc = results.StartedUtc,
+                FinishedUtc = results.FinishedUtc,
+                Completed = results.Completed,
+                ItemsScanned = results.ItemsScanned,
+                ItemsTotal = results.ItemsTotal,
+                LinksTotal = results.LinksTotal,
+                LinksChecked = results.LinksChecked,
+                LinksFromCache = results.LinksFromCache,
+                LinksNotChecked = results.LinksNotChecked,
+                Note = results.Note,
+                IssueCount = issues.Count,
+                NoTrailersCount = issues.Count(i => i.Kind == IssueKinds.NoTrailers),
+                UnplayableCount = issues.Count(i => i.Kind == IssueKinds.Unplayable),
+                InvalidLinkCount = issues.Count(i => i.Kind == IssueKinds.InvalidLink),
+                DuplicateLinkCount = issues.Count(i => i.Kind == IssueKinds.DuplicateLink),
+                PinnedCount = Manager.PinnedCount
+            };
         }
 
         public object Get(GetItemTrailers request)

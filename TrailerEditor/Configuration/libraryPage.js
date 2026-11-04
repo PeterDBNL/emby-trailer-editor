@@ -50,6 +50,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return '<button is="emby-button" type="button" class="raised tl-edit" data-id="' + escapeHtml(id) + '"><span>Edit trailers</span></button>';
     }
 
+    // "<label>: <message>", or just the label when the message only restates it (e.g. "No trailers.").
+    function issueText(i) {
+        var label = kindLabels[i.Kind] || i.Kind;
+        var message = (i.Message || '').trim();
+        if (!message || message.replace(/[.\s]+$/, '').toLowerCase() === label.toLowerCase()) { return label; }
+        return label + ': ' + message;
+    }
+
     function itemMeta(year, type) {
         var parts = [];
         if (year) { parts.push(year); }
@@ -176,15 +184,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // A searchable, paged list that loads when its <details> section is opened.
     function PagedList(view, options) {
         var start = 0;
-        var loaded = false;
         var seq = 0;
         var container = view.querySelector(options.list);
         var pager = view.querySelector(options.pager);
 
         function load() {
             var mySeq = ++seq;
-            loaded = true;
-            container.innerHTML = '<p class="tl-meta">Loading…</p>';
+            // Keep what's shown while reloading, so a refresh doesn't flash or jump.
+            if (!container.innerHTML) { container.innerHTML = '<p class="tl-meta">Loading…</p>'; }
             api('GET', options.path, Object.assign({ StartIndex: start, Limit: pageSize }, options.query())).then(function (page) {
                 if (mySeq !== seq) { return; }
                 var items = page.Items || [];
@@ -212,12 +219,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }
 
         view.querySelector(options.section).addEventListener('toggle', function () {
-            if (this.open && !loaded) { load(); }
+            if (this.open) { load(); }
         });
 
         return {
             reset: function () { start = 0; load(); },
-            refresh: function () { if (loaded) { load(); } },
+            refresh: function () { if (view.querySelector(options.section).open) { load(); } },
             isOpen: function () { return view.querySelector(options.section).open; }
         };
     }
@@ -228,6 +235,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var pollTimer = null;
         var lastState = null;
         var lastIssueCount = null;
+        var lastChecking = null;
+        var lastFinished;
 
         function q(selector) { return view.querySelector(selector); }
 
@@ -237,11 +246,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             pager: '.tl-issuesPager',
             path: 'TrailerEditor/Scan/Issues',
             query: function () { return { Kind: q('.tl-kind').value, SearchTerm: q('.tl-issueSearch').value.trim() }; },
-            empty: function () { return lastState && lastState.HasResults ? 'No problems found.' : 'No scan has run yet. Press Scan now.'; },
+            empty: function () {
+                if (q('.tl-kind').value || q('.tl-issueSearch').value.trim()) { return 'No problems match this filter.'; }
+                return lastState && lastState.HasResults ? 'No problems found.' : 'No scan has run yet. Press Scan now.';
+            },
             render: function (i) {
                 return '<div class="tl-row"><div>' +
                     '<div>' + escapeHtml(i.ItemName) + ' <span class="tl-meta">' + escapeHtml(itemMeta(i.Year, i.Type)) + '</span></div>' +
-                    '<div class="tl-issue tl-kind-' + escapeHtml(i.Kind) + '">' + escapeHtml(kindLabels[i.Kind] || i.Kind) + ': ' + escapeHtml(i.Message) + '</div>' +
+                    '<div class="tl-issue tl-kind-' + escapeHtml(i.Kind) + '">' + escapeHtml(issueText(i)) + '</div>' +
                     (i.Url ? '<div class="tl-url">' + escapeHtml(i.Url) + '</div>' : '') +
                     '</div>' + editButton(i.ItemId) + '</div>';
             }
@@ -294,10 +306,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             // is the browser test. The scan counts as finished only when both are done.
             var running = s.State === 'Running' || s.State === 'Cancelling' || s.State === 'Starting';
             var twoSteps = !!s.BrowserPlaybackTest;
-            var step2 = !running && twoSteps && !!s.HasResults && s.PlaybackDone < s.PlaybackTotal;
+            var stopped = !!s.PlaybackStopped;
+            runner.stopped = stopped || runner.stopping || running; // also pauses while a server scan runs
+            var step2 = !running && !stopped && twoSteps && !!s.HasResults && s.PlaybackDone < s.PlaybackTotal;
             var checking = running || step2;
             var status = q('.tl-status');
             var bar = q('.tl-bar');
+
+            var scopeText = s.ScopeText ? escapeHtml(s.ScopeText) : '';
 
             function problemsText(n) { return n === 1 ? '1 problem' : number(n) + ' problems'; }
 
@@ -309,7 +325,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 } else if (s.State === 'Cancelling') {
                     status.textContent = 'Stopping the scan…';
                 } else {
-                    status.textContent = 'Scanning… ' + pct + '%' +
+                    status.textContent = 'Scanning' + (s.ScopeText ? ' ' + s.ScopeText.replace(', ', ' ') : '') + '… ' + pct + '%' +
                         (twoSteps ? ' · step 1 of 2: checking titles' : '') +
                         (s.TotalToScan ? ' (' + number(s.ScannedSoFar) + ' of ' + number(s.TotalToScan) + (twoSteps ? '' : ' titles') + ')' : '') +
                         ' · ' + problemsText(s.ProblemsSoFar) + ' found so far';
@@ -318,7 +334,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 bar.firstElementChild.style.width = pct + '%';
             } else if (step2) {
                 var pct2 = Math.round(50 + 50 * s.PlaybackDone / s.PlaybackTotal);
-                status.textContent = 'Scanning… ' + pct2 + '% · step 2 of 2: copyright-block test (' +
+                status.textContent = 'Scanning' + (s.ScopeText ? ' ' + s.ScopeText.replace(', ', ' ') : '') + '… ' + pct2 + '% · step 2 of 2: copyright-block test (' +
                     number(s.PlaybackDone) + ' of ' + number(s.PlaybackTotal) + ' links) · ' +
                     problemsText(s.IssueCount) + ' found so far · ' + (runner.state || 'starting') +
                     '. Keep this page open and visible.';
@@ -330,7 +346,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     status.textContent = 'No scan has run yet.';
                 } else {
                     status.innerHTML =
-                        (s.Completed ? 'Last scan finished ' : 'Last scan stopped ') + escapeHtml(formatDate(s.FinishedUtc)) + '.<br>' +
+                        'Last scan' + (scopeText ? ' (' + scopeText + ')' : '') + (s.Completed ? ' finished ' : ' stopped ') + escapeHtml(formatDate(s.FinishedUtc)) + '.<br>' +
                         '<span class="tl-meta">' + number(s.ItemsScanned) + ' titles, ' + number(s.LinksTotal) + ' trailer links: ' +
                         number(s.LinksChecked) + ' checked with YouTube, ' + number(s.LinksFromCache) + ' from earlier results' +
                         (s.LinksNotChecked ? ', ' + number(s.LinksNotChecked) + ' not checked' : '') + '.</span>';
@@ -360,14 +376,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 : (s.HasResults ? '(' + number(s.IssueCount) + ')' : '');
             q('.tl-pinnedCount').textContent = '(' + number(s.PinnedCount) + ')';
             q('.tl-scan').style.display = running ? 'none' : '';
-            q('.tl-cancel').style.display = s.State === 'Running' ? '' : 'none';
+            q('.tl-scope').style.display = running ? 'none' : '';
+            // Stop scan cancels step 1, or stops the copyright-block test in step 2.
+            q('.tl-cancel').style.display = s.State === 'Running' || step2 ? '' : 'none';
+            var canContinue = !running && stopped && twoSteps && !!s.HasResults && s.PlaybackDone < s.PlaybackTotal;
+            q('.tl-continue').style.display = canContinue ? '' : 'none';
 
-            // Refresh the open lists when a scan finishes.
-            if (lastIssueCount !== null && !checking && (s.IssueCount !== lastIssueCount || s.FinishedUtc !== self._lastFinished)) {
-                issues.refresh();
-            }
+            // Reload the open results list when checking ends, a scan finishes, or the count changes.
+            var checkingEnded = lastChecking === true && !checking;
+            var finishedChanged = lastFinished !== undefined && s.FinishedUtc !== lastFinished;
+            var countChanged = lastIssueCount !== null && s.IssueCount !== lastIssueCount;
+            if (checkingEnded || finishedChanged || countChanged) { issues.refresh(); }
+            lastChecking = checking;
             lastIssueCount = s.IssueCount;
-            self._lastFinished = s.FinishedUtc;
+            lastFinished = s.FinishedUtc;
 
             renderPlayback(s);
             renderWarnings(s);
@@ -418,7 +440,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             var button = this;
             button.disabled = true;
             q('.tl-status').textContent = 'Starting the scan…';
-            api('POST', 'TrailerEditor/Scan').then(function (s) {
+            saveScope();
+            api('POST', 'TrailerEditor/Scan', {
+                Types: q('.tl-scopeTypes').value,
+                From: q('.tl-scopeFrom').value,
+                To: q('.tl-scopeTo').value
+            }).then(function (s) {
                 button.disabled = false;
                 renderStatus(s);
             }, function () {
@@ -427,9 +454,46 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             });
         });
 
+        // Stop scan: cancels the server scan in step 1, or stops the browser test in step 2.
+        // Either way the copyright-block test stays stopped until Continue (or a new scan).
         q('.tl-cancel').addEventListener('click', function () {
-            api('POST', 'TrailerEditor/Scan/Cancel').then(renderStatus);
+            var serverScanRunning = lastState && (lastState.State === 'Running' || lastState.State === 'Cancelling' || lastState.State === 'Starting');
+            runner.stopping = true;
+            runner.stopped = true;
+            runner.state = 'stopping';
+            api('POST', serverScanRunning ? 'TrailerEditor/Scan/Cancel' : 'TrailerEditor/Playback/Stop').then(function (s) {
+                runner.stopping = false;
+                renderStatus(s);
+            }, function () { runner.stopping = false; });
         });
+
+        q('.tl-continue').addEventListener('click', function () {
+            api('POST', 'TrailerEditor/Playback/Continue').then(renderStatus);
+        });
+
+        // Remember what to scan.
+        var scopeKey = 'trailerEditorScanScope';
+        function saveScope() {
+            try {
+                localStorage.setItem(scopeKey, JSON.stringify({
+                    types: q('.tl-scopeTypes').value, from: q('.tl-scopeFrom').value, to: q('.tl-scopeTo').value
+                }));
+            } catch (e) { /* storage may be unavailable */ }
+        }
+        (function restoreScope() {
+            q('.tl-scopeTypes').value = '';
+            q('.tl-scopeFrom').value = '#';
+            q('.tl-scopeTo').value = 'Z';
+            try {
+                var saved = JSON.parse(localStorage.getItem(scopeKey) || 'null');
+                if (saved) {
+                    q('.tl-scopeTypes').value = saved.types || '';
+                    q('.tl-scopeFrom').value = saved.from || '#';
+                    q('.tl-scopeTo').value = saved.to || 'Z';
+                }
+            } catch (e) { /* ignore a bad or missing value */ }
+        })();
+        ['.tl-scopeTypes', '.tl-scopeFrom', '.tl-scopeTo'].forEach(function (sel) { q(sel).addEventListener('change', saveScope); });
 
         function loadSettings() {
             ApiClient.getPluginConfiguration(pluginId).then(function (config) {
@@ -470,7 +534,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         // ---- Browser playback tests (copyright blocks) ----
         // Works through the scanned YouTube links in a hidden, muted player while this page
         // is open and visible. Results go to the server, so it picks up where it left off.
-        var runner = { running: false, enabled: false, state: '', unknownInARow: 0 };
+        var runner = { running: false, enabled: false, stopped: false, stopping: false, state: '', unknownInARow: 0 };
 
         function setPlaybackText(text) { q('.tl-playback').textContent = text; }
 
@@ -482,19 +546,23 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 return;
             }
             // Progress while testing is shown in the main scan status above.
+            if (s.PlaybackStopped && s.HasResults && s.PlaybackDone < s.PlaybackTotal) {
+                box.textContent = 'Copyright-block test stopped: ' + number(s.PlaybackDone) + ' of ' + number(s.PlaybackTotal) + ' links tested.';
+                return;
+            }
             box.textContent = s.HasResults ? '' : 'Copyright-block test: waiting for the first library scan.';
-            if (s.HasResults) { startRunner(); }
+            if (s.HasResults && !s.PlaybackStopped) { startRunner(); }
         }
 
         function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
         function startRunner() {
-            if (runner.running || !runner.enabled || !self._active) { return; }
+            if (runner.running || !runner.enabled || runner.stopped || !self._active) { return; }
             runner.running = true;
             runner.state = 'running';
 
             function next() {
-                if (!self._active || !runner.enabled) {
+                if (!self._active || !runner.enabled || runner.stopped) {
                     runner.running = false;
                     runner.state = '';
                     return Promise.resolve();
@@ -505,6 +573,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 }
                 return api('GET', 'TrailerEditor/Playback/Queue', { Limit: 10 }).then(function (queue) {
                     var items = queue.Items || [];
+                    if (runner.stopped) {
+                        runner.running = false;
+                        runner.state = '';
+                        return null;
+                    }
                     if (!items.length) {
                         runner.state = 'all done';
                         return wait(60000).then(next);
@@ -512,7 +585,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     runner.state = 'running';
                     return items.reduce(function (chain, entry) {
                         return chain.then(function () {
-                            if (!self._active || !runner.enabled || document.hidden) { return null; }
+                            if (!self._active || !runner.enabled || runner.stopped || document.hidden) { return null; }
                             runner.state = 'testing "' + entry.ItemName + '"';
                             return playHidden(entry.VideoId).then(function (r) {
                                 runner.unknownInARow = r.status === 'unknown' ? runner.unknownInARow + 1 : 0;
@@ -522,6 +595,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                             });
                         });
                     }, Promise.resolve()).then(function () {
+                        if (runner.stopped) { return next(); }
                         if (runner.unknownInARow >= 5) {
                             runner.state = 'the YouTube player isn\'t responding, retrying in a minute';
                             runner.unknownInARow = 0;

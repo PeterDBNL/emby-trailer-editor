@@ -89,6 +89,15 @@ Trailer Editor page. It has:
   default). Progress is shown on the page and in Scheduled Tasks. Click the summary buttons to
   filter the results, and press **Edit trailers** on a title to fix it in the editor. Saving a
   title in the editor removes its results until the next scan.
+- **Scanning part of the library.** Above *Scan now*, choose *All titles*, *Movies* or *TV shows*
+  and a range of first letters (*From* and *To*; `#` is every title that doesn't start with A-Z).
+  Only that part is scanned, and only its results are replaced: results for other titles are
+  kept, and a finished scan of a segment also drops titles that are no longer in it. A scan you
+  stop only replaces the titles it reached. The copyright-block test covers just the scanned part.
+  Automatic scans always cover everything.
+- **Stop scan** stops everything, including the copyright-block test. If that test was
+  interrupted, the page shows how many links were tested and a **Continue copyright-block test**
+  button; starting a new scan clears the stop.
 - **Scan results**, **Pinned items** and **Settings**: collapsible sections. The lists load
   only when opened, are searchable by title and are paged 50 at a time, so they stay fast
   with tens of thousands of titles.
@@ -136,8 +145,10 @@ All endpoints need an administrator's API key or access token.
 | DELETE | `/emby/TrailerEditor/Items/{Id}/Pin` | Unpin an item |
 | GET | `/emby/TrailerEditor/Pinned?SearchTerm=&StartIndex=0&Limit=50` | List pinned items, one page at a time |
 | GET | `/emby/TrailerEditor/Scan` | Scan status and summary |
-| POST | `/emby/TrailerEditor/Scan` | Start a library scan |
-| POST | `/emby/TrailerEditor/Scan/Cancel` | Stop a running scan |
+| POST | `/emby/TrailerEditor/Scan?Types=&From=&To=` | Start a library scan. Optional `Types` (`Movie` or `Series`, empty for both), `From` and `To` (`#` or `A`-`Z`, default `#` to `Z`) limit it to part of the library |
+| POST | `/emby/TrailerEditor/Scan/Cancel` | Stop a running scan, and the copyright-block test |
+| POST | `/emby/TrailerEditor/Playback/Stop` | Stop the browser copyright-block test |
+| POST | `/emby/TrailerEditor/Playback/Continue` | Let the browser copyright-block test continue |
 | GET | `/emby/TrailerEditor/Playback/Queue?Limit=10` | Next scanned YouTube links that need a browser playback test |
 | POST | `/emby/TrailerEditor/Playback/Result?VideoId=…&Status=ok\|error\|unknown&Message=…` | Record a browser playback test result |
 | GET | `/emby/TrailerEditor/Scan/Issues?Kind=&SearchTerm=&StartIndex=0&Limit=50` | Scan results, one page at a time. `Kind`: `Unplayable`, `NoTrailers`, `InvalidLink` or `DuplicateLink` |

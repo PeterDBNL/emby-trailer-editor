@@ -37,6 +37,10 @@
                     #trailerLibraryPage .tl-schedule { margin-top: .6em; font-size: .92em; }
                     #trailerLibraryPage .tl-inline { display: flex; gap: .8em; flex-wrap: wrap; }
                     #trailerLibraryPage .tl-inline .selectContainer { flex: 0 1 14em; }
+                    #trailerLibraryPage .tl-scope { margin-top: .8em; }
+                    #trailerLibraryPage .tl-scope .tl-inline { gap: .6em; }
+                    #trailerLibraryPage .tl-scope .selectContainer { flex: 0 1 8em; margin-bottom: 0; }
+                    #trailerLibraryPage .tl-scope .selectContainer:first-child { flex-basis: 12em; }
                     #trailerLibraryPage .tl-issue { font-size: .9em; margin-top: .15em; }
                     #trailerLibraryPage .tl-kind-Unplayable, #trailerLibraryPage .tl-kind-InvalidLink { color: #e05252; }
                     #trailerLibraryPage .tl-kind-DuplicateLink { color: #e0a030; }
@@ -60,9 +64,84 @@
                     <div class="tl-playback tl-meta" style="margin-top:.6em;"></div>
                     <div class="tl-warnings"></div>
                     <div class="tl-schedule"></div>
+                    <div class="tl-scope">
+                        <div class="tl-meta">What to scan</div>
+                        <div class="tl-inline">
+                            <div class="selectContainer">
+                                <select is="emby-select" class="tl-scopeTypes" label="Titles">
+                                    <option value="">All titles</option>
+                                    <option value="Movie">Movies</option>
+                                    <option value="Series">TV shows</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer">
+                                <select is="emby-select" class="tl-scopeFrom" label="From">
+                                    <option value="#">#</option>
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                    <option value="C">C</option>
+                                    <option value="D">D</option>
+                                    <option value="E">E</option>
+                                    <option value="F">F</option>
+                                    <option value="G">G</option>
+                                    <option value="H">H</option>
+                                    <option value="I">I</option>
+                                    <option value="J">J</option>
+                                    <option value="K">K</option>
+                                    <option value="L">L</option>
+                                    <option value="M">M</option>
+                                    <option value="N">N</option>
+                                    <option value="O">O</option>
+                                    <option value="P">P</option>
+                                    <option value="Q">Q</option>
+                                    <option value="R">R</option>
+                                    <option value="S">S</option>
+                                    <option value="T">T</option>
+                                    <option value="U">U</option>
+                                    <option value="V">V</option>
+                                    <option value="W">W</option>
+                                    <option value="X">X</option>
+                                    <option value="Y">Y</option>
+                                    <option value="Z">Z</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer">
+                                <select is="emby-select" class="tl-scopeTo" label="To">
+                                    <option value="#">#</option>
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                    <option value="C">C</option>
+                                    <option value="D">D</option>
+                                    <option value="E">E</option>
+                                    <option value="F">F</option>
+                                    <option value="G">G</option>
+                                    <option value="H">H</option>
+                                    <option value="I">I</option>
+                                    <option value="J">J</option>
+                                    <option value="K">K</option>
+                                    <option value="L">L</option>
+                                    <option value="M">M</option>
+                                    <option value="N">N</option>
+                                    <option value="O">O</option>
+                                    <option value="P">P</option>
+                                    <option value="Q">Q</option>
+                                    <option value="R">R</option>
+                                    <option value="S">S</option>
+                                    <option value="T">T</option>
+                                    <option value="U">U</option>
+                                    <option value="V">V</option>
+                                    <option value="W">W</option>
+                                    <option value="X">X</option>
+                                    <option value="Y">Y</option>
+                                    <option value="Z">Z</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                     <div class="tl-buttons">
                         <button is="emby-button" type="button" class="raised button-submit tl-scan"><span>Scan now</span></button>
                         <button is="emby-button" type="button" class="raised tl-cancel" style="display:none;"><span>Stop scan</span></button>
+                        <button is="emby-button" type="button" class="raised button-submit tl-continue" style="display:none;"><span>Continue copyright-block test</span></button>
                     </div>
                 </div>
 

@@ -17,6 +17,9 @@ namespace TrailerEditor.Scanning
         public string ItemName { get; set; }
         public int? Year { get; set; }
         public string Type { get; set; }
+
+        /// <summary>First letter of the title's sort name ("#" for non-letters); null in results from older versions.</summary>
+        public string Letter { get; set; }
         public string Kind { get; set; }
         public string Url { get; set; }
         public string VideoId { get; set; }
@@ -35,6 +38,7 @@ namespace TrailerEditor.Scanning
         public string ItemName { get; set; }
         public int? Year { get; set; }
         public string Type { get; set; }
+        public string Letter { get; set; }
     }
 
     public class CachedLinkResult
@@ -55,6 +59,16 @@ namespace TrailerEditor.Scanning
 
         /// <summary>False if the last scan was cancelled or failed part way.</summary>
         public bool Completed { get; set; }
+
+        /// <summary>What the last scan covered: "" (movies and TV shows), "Movie" or "Series"; null in older results.</summary>
+        public string ScopeTypes { get; set; }
+
+        /// <summary>First and last letter of the last scan ("#" or A-Z); null in older results (everything).</summary>
+        public string ScopeFrom { get; set; }
+        public string ScopeTo { get; set; }
+
+        /// <summary>True when the scan, or the copyright-block test that follows it, was stopped by the user.</summary>
+        public bool PlaybackStopped { get; set; }
 
         public int ItemsScanned { get; set; }
         public int ItemsTotal { get; set; }

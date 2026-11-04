@@ -83,6 +83,12 @@ namespace TrailerEditor.Api
         public int PlaybackTotal { get; set; }
         public int PlaybackDone { get; set; }
         public int PlaybackBlocked { get; set; }
+
+        /// <summary>True after Stop scan: the copyright-block test doesn't run until continued or a new scan starts.</summary>
+        public bool PlaybackStopped { get; set; }
+
+        /// <summary>What the last (or running) scan covers, e.g. "Movies, A–C"; null for everything.</summary>
+        public string ScopeText { get; set; }
     }
 
     [Route("/TrailerEditor/Pinned", "GET", Summary = "Lists items whose trailer links are pinned, one page at a time")]
@@ -125,6 +131,24 @@ namespace TrailerEditor.Api
 
     [Route("/TrailerEditor/Scan", "POST", Summary = "Starts a library scan")]
     public class StartScan : IReturn<ScanStatus>
+    {
+        /// <summary>Movie or Series. Empty for both.</summary>
+        public string Types { get; set; }
+
+        /// <summary>First letter to scan: # (anything that isn't A-Z) or A to Z. Default #.</summary>
+        public string From { get; set; }
+
+        /// <summary>Last letter to scan: # or A to Z. Default Z.</summary>
+        public string To { get; set; }
+    }
+
+    [Route("/TrailerEditor/Playback/Stop", "POST", Summary = "Stops the browser copyright-block test")]
+    public class StopPlayback : IReturn<ScanStatus>
+    {
+    }
+
+    [Route("/TrailerEditor/Playback/Continue", "POST", Summary = "Lets the browser copyright-block test continue")]
+    public class ContinuePlayback : IReturn<ScanStatus>
     {
     }
 
@@ -226,8 +250,9 @@ namespace TrailerEditor.Api
 
         public object Post(StartScan request)
         {
-            if (TrailerScanTask.TryRequestStart())
+            if (TrailerScanTask.TryRequestStart(new ScanScope(request.Types, request.From, request.To)))
             {
+                EntryPoint.Store.SetPlaybackStopped(false);
                 _taskManager.QueueIfNotRunning<TrailerScanTask>();
             }
 
@@ -237,6 +262,19 @@ namespace TrailerEditor.Api
         public object Post(CancelScan request)
         {
             _taskManager.CancelIfRunning<TrailerScanTask>();
+            EntryPoint.Store.SetPlaybackStopped(true);
+            return BuildStatus();
+        }
+
+        public object Post(StopPlayback request)
+        {
+            EntryPoint.Store.SetPlaybackStopped(true);
+            return BuildStatus();
+        }
+
+        public object Post(ContinuePlayback request)
+        {
+            EntryPoint.Store.SetPlaybackStopped(false);
             return BuildStatus();
         }
 
@@ -360,7 +398,9 @@ namespace TrailerEditor.Api
                 Schedule = TrailerScanTask.Describe(config),
                 PlaybackTotal = playback.Total,
                 PlaybackDone = playback.Done,
-                PlaybackBlocked = playback.Blocked
+                PlaybackBlocked = playback.Blocked,
+                PlaybackStopped = results.PlaybackStopped,
+                ScopeText = ScanScope.Of(live ?? results).Describe()
             };
         }
 

@@ -33,6 +33,7 @@ namespace TrailerEditor.Scanning
 
         private static readonly object StateLock = new object();
         private static DateTime? _requestedUtc;
+        private static ScanScope _pendingScope;
 
         /// <summary>The scan that's running right now (live counts), or null.</summary>
         public static ScanResults InProgress { get; private set; }
@@ -41,7 +42,7 @@ namespace TrailerEditor.Scanning
         /// Marks a scan as requested. Returns false if one is already running or about to
         /// start, so pressing Scan now twice doesn't queue a second scan.
         /// </summary>
-        public static bool TryRequestStart()
+        public static bool TryRequestStart(ScanScope scope = null)
         {
             lock (StateLock)
             {
@@ -51,6 +52,7 @@ namespace TrailerEditor.Scanning
                 }
 
                 _requestedUtc = DateTime.UtcNow;
+                _pendingScope = scope;
                 return true;
             }
         }
@@ -129,7 +131,23 @@ namespace TrailerEditor.Scanning
             var store = EntryPoint.Store;
             var previous = store.Current;
 
-            var results = new ScanResults { StartedUtc = DateTime.UtcNow };
+            // The scope asked for with Scan now; automatic and scheduled runs scan everything.
+            ScanScope scope;
+            lock (StateLock)
+            {
+                var fresh = _requestedUtc != null && DateTime.UtcNow - _requestedUtc.Value < TimeSpan.FromMinutes(10);
+                scope = fresh && _pendingScope != null ? _pendingScope : ScanScope.All;
+                _pendingScope = null;
+            }
+
+            store.SetPlaybackStopped(false);
+            var results = new ScanResults
+            {
+                StartedUtc = DateTime.UtcNow,
+                ScopeTypes = scope.Types,
+                ScopeFrom = scope.From,
+                ScopeTo = scope.To
+            };
             var recheckAfter = DateTime.UtcNow.AddDays(-Math.Max(0, config.ScanRecheckDays));
             var cache = previous.LinkCache
                 .Where(c => c.VideoId != null)
@@ -145,10 +163,10 @@ namespace TrailerEditor.Scanning
                 IncludeItemTypes = TrailerManager.SupportedTypes,
                 Recursive = true,
                 IsVirtualItem = false
-            });
+            }).Where(i => scope.Matches(i.GetClientTypeName(), LetterOf(i))).ToArray();
 
             results.ItemsTotal = items.Length;
-            _logger.Info("Trailer Editor: scanning {0} movies and TV shows", items.Length);
+            _logger.Info("Trailer Editor: scanning {0} movies and TV shows{1}", items.Length, scope.IsEverything ? string.Empty : " (" + scope.Describe() + ")");
 
             lock (StateLock)
             {
@@ -156,14 +174,25 @@ namespace TrailerEditor.Scanning
                 _requestedUtc = null;
             }
 
+            // Titles this run got all the way through, and the one it was in the middle of (if stopped).
+            var scanned = new HashSet<string>();
+            string current = null;
+
             try
             {
                 for (var i = 0; i < items.Length; i++)
                 {
+                    if (current != null)
+                    {
+                        scanned.Add(current);
+                        current = null;
+                    }
+
                     cancellationToken.ThrowIfCancellationRequested();
                     progress.Report(100.0 * i / Math.Max(1, items.Length));
 
                     var item = items[i];
+                    current = item.InternalId.ToString();
                     var urls = item.RemoteTrailers ?? new string[0];
                     results.ItemsScanned++;
 
@@ -223,7 +252,8 @@ namespace TrailerEditor.Scanning
                             ItemId = item.InternalId.ToString(),
                             ItemName = item.Name,
                             Year = item.ProductionYear,
-                            Type = item.GetClientTypeName()
+                            Type = item.GetClientTypeName(),
+                            Letter = LetterOf(item)
                         });
 
                         if (cache.TryGetValue(videoId, out var known) && known.CheckedUtc >= recheckAfter)
@@ -289,6 +319,12 @@ namespace TrailerEditor.Scanning
                     }
                 }
 
+                if (current != null)
+                {
+                    scanned.Add(current);
+                    current = null;
+                }
+
                 results.Completed = true;
                 progress.Report(100);
             }
@@ -301,6 +337,15 @@ namespace TrailerEditor.Scanning
                         "The scan was stopped after " + results.ItemsScanned + " of " + results.ItemsTotal + " titles.";
                 }
 
+                // A title stopped half way has only some of its new results; drop them and keep its old ones.
+                if (current != null)
+                {
+                    results.Issues.RemoveAll(x => x.ItemId == current);
+                    results.Links.RemoveAll(x => x.ItemId == current);
+                }
+
+                Merge(results, previous, scope, scanned);
+                results.PlaybackStopped = cancellationToken.IsCancellationRequested || store.Current.PlaybackStopped;
                 results.LinkCache = cache.Values.ToList();
                 results.Issues = results.Issues
                     .OrderBy(x => x.ItemName, StringComparer.OrdinalIgnoreCase)
@@ -316,6 +361,39 @@ namespace TrailerEditor.Scanning
                     results.Completed ? "finished" : "stopped", results.ItemsScanned, results.LinksTotal,
                     results.LinksChecked, results.LinksFromCache, results.Issues.Count);
             }
+        }
+
+        /// <summary>
+        /// Adds the earlier results that are still valid to this run's. An earlier entry is kept
+        /// when this run did not scan its title AND (the title is outside this run's scope OR this
+        /// run didn't finish). So a finished scan of a segment replaces that segment completely
+        /// (titles that no longer exist there disappear), while a stopped scan only replaces the
+        /// titles it reached. Entries from older versions have no Letter: they count as outside any
+        /// letter range that isn't the full # to Z, so they're kept rather than lost; a finished
+        /// scan of everything still replaces them.
+        /// </summary>
+        private static void Merge(ScanResults results, ScanResults previous, ScanScope scope, HashSet<string> scanned)
+        {
+            bool Keep(string itemId, string type, string letter) =>
+                !scanned.Contains(itemId) && (!results.Completed || !scope.Matches(type, letter));
+
+            results.Issues.AddRange(previous.Issues.Where(x => Keep(x.ItemId, x.Type, x.Letter)));
+            results.Links.AddRange(previous.Links.Where(x => Keep(x.ItemId, x.Type, x.Letter)));
+        }
+
+        private static string LetterOf(BaseItem item)
+        {
+            string sortName = null;
+            try
+            {
+                sortName = item.SortName;
+            }
+            catch (Exception)
+            {
+                // Fall back to the name below.
+            }
+
+            return ScanScope.LetterOf(sortName, item.Name);
         }
 
         private static int LocalTrailerCount(BaseItem item)
@@ -338,6 +416,7 @@ namespace TrailerEditor.Scanning
                 ItemName = item.Name,
                 Year = item.ProductionYear,
                 Type = item.GetClientTypeName(),
+                Letter = LetterOf(item),
                 Kind = kind,
                 Url = url,
                 Message = message

@@ -76,6 +76,20 @@ namespace TrailerEditor.Scanning
             }
         }
 
+        /// <summary>Stops (or lets continue) the browser copyright-block test.</summary>
+        public void SetPlaybackStopped(bool stopped)
+        {
+            lock (_lock)
+            {
+                EnsureLoaded();
+                if (_results.PlaybackStopped != stopped)
+                {
+                    _results.PlaybackStopped = stopped;
+                    SaveNow();
+                }
+            }
+        }
+
         /// <summary>Records the result of a playback test, or of a trailer seen playing in Emby.</summary>
         public void RecordPlayback(string videoId, string status, string message, string source)
         {
@@ -146,6 +160,7 @@ namespace TrailerEditor.Scanning
                             ItemName = link.ItemName,
                             Year = link.Year,
                             Type = link.Type,
+                            Letter = link.Letter,
                             Kind = IssueKinds.Unplayable,
                             Url = link.Url,
                             VideoId = link.VideoId,
@@ -173,7 +188,12 @@ namespace TrailerEditor.Scanning
                 EnsureLoaded();
                 var serverErrors = ServerErrors();
                 var freshAfter = FreshAfter(recheckDays);
-                return _results.Links
+                if (_results.PlaybackStopped)
+                {
+                    return new List<PlaybackQueueEntry>();
+                }
+
+                return InScope()
                     .Where(l => !serverErrors.Contains(l.VideoId) && !IsFresh(l.VideoId, freshAfter))
                     .GroupBy(l => l.VideoId)
                     .Take(Math.Max(1, limit))
@@ -189,7 +209,7 @@ namespace TrailerEditor.Scanning
                 EnsureLoaded();
                 var serverErrors = ServerErrors();
                 var freshAfter = FreshAfter(recheckDays);
-                var ids = _results.Links.Select(l => l.VideoId).Where(id => !serverErrors.Contains(id)).Distinct().ToList();
+                var ids = InScope().Select(l => l.VideoId).Where(id => !serverErrors.Contains(id)).Distinct().ToList();
                 return new PlaybackCounts
                 {
                     Total = ids.Count,
@@ -197,6 +217,13 @@ namespace TrailerEditor.Scanning
                     Blocked = ids.Count(id => _playback.TryGetValue(id, out var r) && r.Status == YouTubeChecker.Error)
                 };
             }
+        }
+
+        /// <summary>Links inside the last scan's scope, so progress matches what the user asked to scan.</summary>
+        private IEnumerable<LinkRef> InScope()
+        {
+            var scope = ScanScope.Of(_results);
+            return _results.Links.Where(l => scope.Matches(l.Type, l.Letter));
         }
 
         private HashSet<string> ServerErrors() => new HashSet<string>(

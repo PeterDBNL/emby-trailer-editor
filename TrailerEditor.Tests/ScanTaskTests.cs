@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
@@ -77,6 +78,34 @@ public class ScanTaskTests
 
     private static Movie MovieWith(long id, string name, params string[] trailers) =>
         new Movie { Name = name, InternalId = id, ProductionYear = 2000, RemoteTrailers = trailers };
+
+    private static Movie Sorted(long id, string sortName, params string[] trailers)
+    {
+        var m = MovieWith(id, sortName, trailers);
+        SetSortName(m, sortName);
+        return m;
+    }
+
+    // BaseItem.SortName's setter needs Emby's server configuration, which doesn't exist in tests.
+    private static void SetSortName(BaseItem item, string sortName) =>
+        typeof(BaseItem).GetField("_sortName", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(item, sortName);
+
+    private static Series ShowSorted(long id, string sortName, params string[] trailers) =>
+        ShowWithSortName(new Series { Name = sortName, InternalId = id, ProductionYear = 2000, RemoteTrailers = trailers }, sortName);
+
+    private static Series ShowWithSortName(Series show, string sortName)
+    {
+        SetSortName(show, sortName);
+        return show;
+    }
+
+    private ScanResults RunScope(string types, string from, string to, CancellationToken token = default)
+    {
+        Assert.True(TrailerScanTask.TryRequestStart(new ScanScope(types, from, to)));
+        return Run(token);
+    }
+
+    private static string[] Names(ScanResults r) => r.Issues.Select(i => i.ItemName).OrderBy(x => x).ToArray();
 
     private ScanResults Run(CancellationToken token = default)
     {
@@ -285,5 +314,155 @@ public class ScanTaskTests
         EntryPoint.Store.RemoveIssuesFor("7");
 
         Assert.Equal("Other", EntryPoint.Store.GetIssues().Single().ItemName);
+    }
+
+    [Fact]
+    public void ScopeFiltersByTypeAndLetterRange()
+    {
+        _items = new BaseItem[]
+        {
+            Sorted(1, "Alpha"), Sorted(2, "bravo"), Sorted(3, "Charlie"), Sorted(4, "Zulu"),
+            Sorted(5, "9 Lives"), Sorted(6, "  "), ShowSorted(7, "Bravo Show")
+        };
+
+        var all = Run();
+        Assert.Equal(7, all.ItemsScanned);
+        Assert.Null(ScanScope.Of(all).Describe());
+
+        var movies = RunScope("Movie", "A", "C");
+        Assert.Equal(3, movies.ItemsScanned);
+        Assert.Equal("Movies, A–C", ScanScope.Of(movies).Describe());
+
+        var shows = RunScope("Series", null, null);
+        Assert.Equal(1, shows.ItemsScanned);
+
+        // From after To is swapped; # is anything that isn't A-Z, and sorts first.
+        var swapped = RunScope("", "C", "A");
+        Assert.Equal(4, swapped.ItemsScanned);
+        Assert.Equal("A", swapped.ScopeFrom);
+        Assert.Equal("C", swapped.ScopeTo);
+        var other = RunScope("Movie", "#", "#");
+        Assert.Equal(2, other.ItemsScanned);
+        Assert.Contains(other.Issues, i => i.Letter == "#");
+        Assert.Equal("Movies, #", ScanScope.Of(other).Describe());
+    }
+
+    [Fact]
+    public void ScopeIsOnlyUsedByTheNextRun()
+    {
+        _items = new BaseItem[] { Sorted(1, "Alpha"), Sorted(2, "Zulu") };
+        Assert.Equal(1, RunScope("", "A", "A").ItemsScanned);
+        Assert.Equal(2, Run().ItemsScanned);
+    }
+
+    [Fact]
+    public void CompletedSegmentScanReplacesOnlyThatSegment()
+    {
+        _items = new BaseItem[] { Sorted(1, "Alpha"), Sorted(2, "Apple"), Sorted(3, "Zulu"), ShowSorted(4, "Alien") };
+        var first = Run();
+        Assert.Equal(4, first.Issues.Count);
+
+        // Apple is gone from the library, Alpha now has a trailer.
+        _items = new BaseItem[] { Sorted(1, "Alpha", Ok1), Sorted(3, "Zulu"), ShowSorted(4, "Alien") };
+        var r = RunScope("Movie", "A", "B");
+
+        Assert.True(r.Completed);
+        Assert.Equal(1, r.ItemsScanned);
+        // Alpha replaced (no problems now), Apple dropped, Zulu (other letters) and Alien (a show) kept.
+        Assert.Equal(new[] { "Alien", "Zulu" }, Names(r));
+        Assert.DoesNotContain(r.Links, l => l.ItemName == "Apple");
+        Assert.Contains(r.Links, l => l.ItemName == "Alpha" && l.Letter == "A");
+    }
+
+    [Fact]
+    public void StoppedScanOnlyReplacesTitlesItReached()
+    {
+        _items = new BaseItem[] { Sorted(1, "Alpha"), Sorted(2, "Bravo"), Sorted(3, "Charlie") };
+        Run();
+
+        // Alpha gets a trailer; the scan is stopped while checking the second title.
+        _items = new BaseItem[] { Sorted(1, "Alpha", Ok1), Sorted(2, "Bravo", Ok2), Sorted(3, "Charlie", Ok1) };
+        using (var cts = new CancellationTokenSource())
+        {
+            _checker.Answer = url =>
+            {
+                if (url.Contains("okokokokok2"))
+                {
+                    cts.Cancel();
+                    throw new OperationCanceledException();
+                }
+
+                return new LinkCheckResult { Status = YouTubeChecker.Ok, Message = "No problems found." };
+            };
+            _checker.Calls.Clear();
+            Assert.ThrowsAny<OperationCanceledException>(() => Run(cts.Token));
+        }
+
+        var r = EntryPoint.Store.Current;
+        Assert.False(r.Completed);
+        // Alpha finished: replaced. Bravo was cut off: its earlier result stays. Charlie never reached: kept.
+        Assert.Equal(new[] { "Bravo", "Charlie" }, Names(r));
+        Assert.DoesNotContain(r.Links, l => l.ItemName == "Bravo");
+        Assert.True(r.PlaybackStopped);
+    }
+
+    [Fact]
+    public void OldResultsWithoutLetterAreKeptByASegmentScanAndReplacedByAFullScan()
+    {
+        _items = new BaseItem[] { Sorted(1, "Alpha"), Sorted(2, "Zulu") };
+        Run();
+        foreach (var i in EntryPoint.Store.Current.Issues)
+        {
+            i.Letter = null; // as saved by an older version
+        }
+
+        _items = new BaseItem[] { Sorted(1, "Alpha", Ok1) };
+        var segment = RunScope("", "A", "A");
+        Assert.Equal(new[] { "Zulu" }, Names(segment));
+
+        foreach (var i in segment.Issues)
+        {
+            i.Letter = null;
+        }
+
+        Assert.Empty(Run().Issues);
+    }
+
+    [Fact]
+    public void StoppedPlaybackHidesTheQueueUntilContinuedOrANewScan()
+    {
+        _items = new BaseItem[] { Sorted(1, "Alpha", Ok1) };
+        Run();
+        Assert.Single(EntryPoint.Store.GetPlaybackQueue(10, 30));
+
+        EntryPoint.Store.SetPlaybackStopped(true);
+        Assert.Empty(EntryPoint.Store.GetPlaybackQueue(10, 30));
+        Assert.Equal(1, EntryPoint.Store.GetPlaybackCounts(30).Total);
+
+        EntryPoint.Store.SetPlaybackStopped(false);
+        Assert.Single(EntryPoint.Store.GetPlaybackQueue(10, 30));
+
+        EntryPoint.Store.SetPlaybackStopped(true);
+        var r = Run();
+        Assert.False(r.PlaybackStopped);
+        Assert.Single(EntryPoint.Store.GetPlaybackQueue(10, 30));
+    }
+
+    [Fact]
+    public void PlaybackQueueAndCountsOnlyCoverTheScope()
+    {
+        _items = new BaseItem[]
+        {
+            Sorted(1, "Alpha", Ok1), Sorted(2, "Zulu", Ok2), ShowSorted(3, "Alien", "https://www.youtube.com/watch?v=showshowsh1")
+        };
+        Run();
+        Assert.Equal(3, EntryPoint.Store.GetPlaybackCounts(30).Total);
+
+        RunScope("Movie", "A", "B");
+
+        // Zulu and Alien were kept from the earlier scan but aren't part of this one.
+        Assert.Equal(new[] { "okokokokok1" }, EntryPoint.Store.GetPlaybackQueue(10, 30).Select(q => q.VideoId).ToArray());
+        Assert.Equal(1, EntryPoint.Store.GetPlaybackCounts(30).Total);
+        Assert.Equal(3, EntryPoint.Store.Current.Links.Count);
     }
 }

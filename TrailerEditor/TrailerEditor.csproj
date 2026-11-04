@@ -4,8 +4,8 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>TrailerEditor</AssemblyName>
     <RootNamespace>TrailerEditor</RootNamespace>
-    <AssemblyVersion>1.8.0.0</AssemblyVersion>
-    <FileVersion>1.8.0.0</FileVersion>
+    <AssemblyVersion>1.9.0.0</AssemblyVersion>
+    <FileVersion>1.9.0.0</FileVersion>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
@@ -24,6 +24,8 @@
     <None Remove="Configuration\libraryPage.js" />
     <EmbeddedResource Include="Configuration\libraryPage.html" />
     <EmbeddedResource Include="Configuration\libraryPage.js" />
+    <None Remove="thumb.jpg" />
+    <EmbeddedResource Include="thumb.jpg" />
   </ItemGroup>
 
   <ItemGroup>

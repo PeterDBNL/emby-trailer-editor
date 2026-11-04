@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using TrailerEditor.Configuration;
 
 namespace TrailerEditor
 {
-    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
+    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasThumbImage
     {
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
             : base(applicationPaths, xmlSerializer)
@@ -32,6 +34,11 @@ namespace TrailerEditor
             // Settings were saved from the Trailer Library page: apply the scan schedule.
             EntryPoint.ApplyScanSchedule();
         }
+
+        public ImageFormat ThumbImageFormat => ImageFormat.Jpg;
+
+        public Stream GetThumbImage() =>
+            GetType().Assembly.GetManifestResourceStream(GetType().Namespace + ".thumb.jpg");
 
         public IEnumerable<PluginPageInfo> GetPages()
         {

@@ -1,6 +1,8 @@
 define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (BaseView, loading) {
     'use strict';
 
+    var pluginId = '6f1d7a7e-3c1b-4f4e-9b8a-2d5c0e7a91b4';
+
     function escapeHtml(value) {
         return String(value == null ? '' : value)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -223,6 +225,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 '<div class="inputContainer"><input is="emby-input" type="text" class="te-url" label="Trailer link" /></div>' +
                 '<button is="emby-button" type="button" class="raised te-test"><span>Test</span></button>' +
                 '<button is="emby-button" type="button" class="raised te-open"><span>Open</span></button>' +
+                '<button is="emby-button" type="button" class="raised te-download" style="display:none;"><span>Download</span></button>' +
                 '<button is="emby-button" type="button" class="raised te-remove"><span>Remove</span></button>' +
                 '<div class="te-check"></div>';
             q('.te-links').appendChild(row);
@@ -247,6 +250,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 row.setAttribute('data-check', status || '');
                 check.className = 'te-check' + (status ? ' te-check-' + status : '');
                 check.textContent = text || '';
+                // A link that won't play can be downloaded and saved with the media instead.
+                row.querySelector('.te-download').style.display = status === 'error' && youTubeId(input.value.trim()) ? '' : 'none';
+                if (status !== 'error' && row._closeDownload) { row._closeDownload(); }
             }
 
             function runCheck() {
@@ -303,6 +309,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 row.parentNode.removeChild(row);
             });
             row.querySelector('.te-test').addEventListener('click', function () { runTest(row); });
+            row.querySelector('.te-download').addEventListener('click', function () { toggleDownload(row); });
             row.querySelector('.te-open').addEventListener('click', function () {
                 var value = input.value.trim();
                 var id = youTubeId(value);
@@ -311,6 +318,161 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
                 if (value) { window.open(value, '_blank', 'noopener'); }
             });
             return input;
+        }
+
+
+        // ---- Download a trailer that won't play ----
+
+        var downloadDefaults = null;
+        function removeLinkDefault() {
+            if (downloadDefaults !== null) { return Promise.resolve(downloadDefaults); }
+            try {
+                return Promise.resolve(ApiClient.getPluginConfiguration(pluginId)).then(function (c) {
+                    downloadDefaults = !c || c.DownloadRemoveLinkAfter !== false;
+                    return downloadDefaults;
+                }, function () { return true; });
+            } catch (e) { return Promise.resolve(true); }
+        }
+
+        function toggleDownload(row) {
+            if (row._dlPanel) { row._closeDownload(); return; }
+            if (!current) { return; }
+            var itemId = current.Id;
+            var panel = document.createElement('div');
+            panel.className = 'te-dl';
+            panel.innerHTML =
+                '<p>This link won\'t play in Emby. You can download the trailer and save it with the movie or show instead, so it plays from your server.</p>' +
+                '<div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="te-dlRemove" checked />' +
+                '<span>Remove this YouTube link after downloading</span></label></div>' +
+                '<div class="te-dlStatus"></div>' +
+                '<div class="te-dlButtons">' +
+                '<button is="emby-button" type="button" class="raised te-dlInstall" style="display:none;"><span>Install yt-dlp</span></button>' +
+                '<button is="emby-button" type="button" class="raised button-submit te-dlStart"><span>Start download</span></button>' +
+                '<button is="emby-button" type="button" class="raised te-dlClose"><span>Close</span></button></div>' +
+                '<p class="te-dlNotice te-meta" style="margin:.8em 0 0;">Downloading from YouTube may be against YouTube\'s terms, and trailers are copyrighted. ' +
+                'Only download for your own personal use where that\'s allowed.</p>';
+            row.appendChild(panel);
+            row._dlPanel = panel;
+
+            var status = panel.querySelector('.te-dlStatus');
+            var startBtn = panel.querySelector('.te-dlStart');
+            var installBtn = panel.querySelector('.te-dlInstall');
+            var pollTimer = null;
+            var closed = false;
+
+            function setStatus(text, kind) {
+                status.textContent = text || '';
+                status.className = 'te-dlStatus' + (kind ? ' te-check-' + kind : '');
+            }
+
+            row._closeDownload = function () {
+                closed = true;
+                clearTimeout(pollTimer);
+                if (panel.parentNode) { panel.parentNode.removeChild(panel); }
+                row._dlPanel = null;
+                row._closeDownload = null;
+            };
+            panel.querySelector('.te-dlClose').addEventListener('click', row._closeDownload);
+
+            function poll() {
+                if (closed) { return; }
+                api('GET', 'TrailerEditor/Items/' + encodeURIComponent(itemId) + '/Download').then(function (job) {
+                    if (closed) { return; }
+                    if (job.State === 'running') {
+                        var pct = Math.round(job.Percent || 0);
+                        setStatus(job.Message && job.Message.indexOf('Downloading') !== 0 ? job.Message : 'Downloading… ' + pct + '%');
+                        startBtn.disabled = true;
+                        pollTimer = setTimeout(poll, 1500);
+                    } else if (job.State === 'done') {
+                        setStatus('✓ ' + job.Message, 'ok');
+                        startBtn.style.display = 'none';
+                        // The server already removed the link; take it out here too so Save doesn't put it back.
+                        if (panel.querySelector('.te-dlRemove').checked && job.Url && row._removeAfter) { row._removeAfter(); }
+                    } else if (job.State === 'failed') {
+                        setStatus('✗ ' + job.Message, 'error');
+                        startBtn.disabled = false;
+                    }
+                }, function () {
+                    if (closed) { return; }
+                    setStatus('Couldn\'t get the download progress. It may still be running on the server.', 'error');
+                    startBtn.disabled = false;
+                });
+            }
+
+            function checkInstalled() {
+                setStatus('Checking for yt-dlp…');
+                startBtn.disabled = true;
+                return api('GET', 'TrailerEditor/Downloads/Status').then(function (s) {
+                    if (closed) { return false; }
+                    if (s.Installed) {
+                        setStatus('');
+                        installBtn.style.display = 'none';
+                        startBtn.style.display = '';
+                        startBtn.disabled = false;
+                        return true;
+                    }
+                    setStatus('yt-dlp, the free tool that does the downloading, isn\'t installed on this server yet.' + (s.Error && s.Error.indexOf('isn\'t installed') < 0 ? ' ' + s.Error : ''), 'error');
+                    installBtn.style.display = '';
+                    startBtn.style.display = 'none';
+                    return false;
+                }, function (err) {
+                    errorText(err, 'Couldn\'t check for yt-dlp.').then(function (t) { if (!closed) { setStatus(t, 'error'); } });
+                    return false;
+                });
+            }
+
+            function start() {
+                var value = row.querySelector('.te-url').value.trim();
+                startBtn.disabled = true;
+                setStatus('Starting…');
+                api('POST', 'TrailerEditor/Items/' + encodeURIComponent(itemId) + '/Download',
+                    { Url: value, RemoveLink: panel.querySelector('.te-dlRemove').checked }).then(function () {
+                    poll();
+                }, function (err) {
+                    errorText(err, 'Couldn\'t start the download.').then(function (t) { if (!closed) { setStatus('✗ ' + t, 'error'); startBtn.disabled = false; } });
+                });
+            }
+
+            startBtn.addEventListener('click', start);
+            installBtn.addEventListener('click', function () {
+                installBtn.disabled = true;
+                setStatus('Installing yt-dlp… this can take a minute.');
+                api('POST', 'TrailerEditor/Downloads/InstallYtDlp').then(function (s) {
+                    installBtn.disabled = false;
+                    if (closed) { return; }
+                    if (s.Installed) {
+                        setStatus('yt-dlp ' + s.YtDlpVersion + ' installed. Starting the download…', 'ok');
+                        installBtn.style.display = 'none';
+                        startBtn.style.display = '';
+                        start();
+                    } else {
+                        setStatus('✗ ' + (s.Error || 'yt-dlp was downloaded but can\'t be started.'), 'error');
+                    }
+                }, function (err) {
+                    installBtn.disabled = false;
+                    errorText(err, 'Couldn\'t install yt-dlp.').then(function (t) { if (!closed) { setStatus('✗ ' + t, 'error'); } });
+                });
+            });
+
+            // The row removes itself after a successful download when the link was taken off the item.
+            row._removeAfter = function () {
+                setTimeout(function () {
+                    if (!row.parentNode) { return; }
+                    row.parentNode.removeChild(row);
+                    if (!view.querySelector('.te-link')) { addLinkRow(''); }
+                    showMessage('Downloaded the trailer and removed its YouTube link. Emby is refreshing the title so the trailer shows up.', false);
+                }, 4000);
+            };
+
+            removeLinkDefault().then(function (def) {
+                if (closed) { return; }
+                panel.querySelector('.te-dlRemove').checked = def;
+                // Resume a download that is already running for this title.
+                api('GET', 'TrailerEditor/Items/' + encodeURIComponent(itemId) + '/Download').then(function (job) {
+                    if (closed) { return; }
+                    if (job && job.State === 'running') { startBtn.disabled = true; poll(); } else { checkInstalled(); }
+                }, function () { checkInstalled(); });
+            });
         }
 
         var testSeq = 0;
@@ -486,6 +648,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         }
         q('.te-results').addEventListener('click', onListClick);
 
+        q('.te-searchYt').addEventListener('click', function () {
+            if (!current) { return; }
+            var query = [current.Name, current.Year, 'trailer'].filter(function (p) { return p; }).join(' ');
+            window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query), '_blank', 'noopener');
+        });
         q('.te-add').addEventListener('click', function () { addLinkRow('').focus(); });
         q('.te-save').addEventListener('click', save);
         q('.te-unpin').addEventListener('click', unpin);

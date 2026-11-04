@@ -55,6 +55,17 @@ namespace TrailerEditor.Configuration
 
         /// <summary>Re-use a link's previous result for this many days before checking it again.</summary>
         public int ScanRecheckDays { get; set; } = 30;
+
+        // ---- Downloads ----
+
+        /// <summary>Full path of the yt-dlp executable. Empty = use the copy installed by this plugin.</summary>
+        public string YtDlpPath { get; set; } = string.Empty;
+
+        /// <summary>Highest video height to download (480, 720, 1080, 1440 or 2160).</summary>
+        public int DownloadMaxHeight { get; set; } = 1080;
+
+        /// <summary>Default for "Remove this YouTube link after downloading".</summary>
+        public bool DownloadRemoveLinkAfter { get; set; } = true;
     }
 
     public class TrailerOverride

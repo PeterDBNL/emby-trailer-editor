@@ -4,15 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.MediaEncoding;
-using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.IO;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Tasks;
-using TrailerEditor.Downloads;
 using TrailerEditor.Scanning;
 
 namespace TrailerEditor
@@ -32,8 +28,7 @@ namespace TrailerEditor
         private readonly ConcurrentDictionary<Guid, byte> _inProgress = new ConcurrentDictionary<Guid, byte>();
 
         public EntryPoint(ILibraryManager libraryManager, ILogManager logManager, IApplicationPaths applicationPaths,
-            IJsonSerializer json, ISessionManager sessionManager, ITaskManager taskManager,
-            IMediaEncoder mediaEncoder, IProviderManager providerManager, IFileSystem fileSystem)
+            IJsonSerializer json, ISessionManager sessionManager, ITaskManager taskManager)
         {
             _taskManager = taskManager;
             Instance = this;
@@ -42,15 +37,12 @@ namespace TrailerEditor
             _logger = logManager.GetLogger("TrailerEditor");
             Store = new ScanStore(applicationPaths, json, _logger);
             Manager = new TrailerManager(libraryManager, _logger);
-            Downloader = new TrailerDownloader(_logger, applicationPaths, mediaEncoder, providerManager, fileSystem, () => Manager);
         }
 
         /// <summary>Results of the last library scan.</summary>
         public static ScanStore Store { get; private set; }
 
         public static TrailerManager Manager { get; private set; }
-
-        public static TrailerDownloader Downloader { get; private set; }
 
         public static YouTubeChecker Checker { get; internal set; } = new YouTubeChecker();
 

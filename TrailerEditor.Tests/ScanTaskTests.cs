@@ -64,7 +64,7 @@ public class ScanTaskTests
         plugin.Configuration.ScanRecheckDays = 30;
 
         _library.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(() => _items);
-        new EntryPoint(_library.Object, logManager.Object, paths.Object, new Mock<IJsonSerializer>().Object, new Mock<MediaBrowser.Controller.Session.ISessionManager>().Object, new Mock<MediaBrowser.Model.Tasks.ITaskManager>().Object, new Mock<MediaBrowser.Controller.MediaEncoding.IMediaEncoder>().Object, new Mock<MediaBrowser.Controller.Providers.IProviderManager>().Object, new Mock<MediaBrowser.Model.IO.IFileSystem>().Object);
+        new EntryPoint(_library.Object, logManager.Object, paths.Object, new Mock<IJsonSerializer>().Object, new Mock<MediaBrowser.Controller.Session.ISessionManager>().Object, new Mock<MediaBrowser.Model.Tasks.ITaskManager>().Object);
         EntryPoint.Checker = _checker;
 
         _checker.Answer = url => url.Contains("blockblock1")

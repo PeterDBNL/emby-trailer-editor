@@ -14,8 +14,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     var settingNames = ['PinEditedTrailers', 'ScanReportNoTrailers', 'ScanIgnoreItemsWithLocalTrailers',
         'ScanCheckLinks', 'ScanCheckAgeRestriction', 'ScanBrowserPlaybackTest', 'ScanLearnFromPlayback',
         'ScanRequestDelayMs', 'ScanRecheckDays', 'ScanSchedule', 'ScanScheduleDay', 'ScanScheduleHour',
-        'ScanScheduleAddedWithinDays', 'YtDlpPath', 'DownloadMaxHeight', 'DownloadRemoveLinkAfter'];
-    var textSettings = { ScanSchedule: true, YtDlpPath: true };
+        'ScanScheduleAddedWithinDays'];
+    var textSettings = { ScanSchedule: true };
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -534,38 +534,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 q('.tl-scheduleCovers').value = coverDays > 0 ? 'Recent' : 'All';
                 if (!(coverDays > 0)) { q('.tl-ScanScheduleAddedWithinDays').value = '7'; }
                 updateScheduleFields();
-                if (!q('.tl-DownloadMaxHeight').value) { q('.tl-DownloadMaxHeight').value = '1080'; }
-            });
-            loadDownloadStatus();
-        }
-
-        function showDownloadStatus(s) {
-            var parts = [s.Installed ? 'yt-dlp ' + (s.YtDlpVersion || '') + ' is installed' : (s.Error || 'yt-dlp isn\'t installed.')];
-            parts.push(s.FfmpegPath ? 'ffmpeg found (' + s.FfmpegPath + ')' : 'ffmpeg not found (videos are saved as a single file, which may limit quality)');
-            q('.tl-dlStatus').textContent = parts.join(' · ');
-        }
-
-        function loadDownloadStatus() {
-            api('GET', 'TrailerEditor/Downloads/Status').then(showDownloadStatus, function () {
-                q('.tl-dlStatus').textContent = 'Couldn\'t check yt-dlp.';
             });
         }
-
-        q('.tl-dlInstall').addEventListener('click', function () {
-            var btn = q('.tl-dlInstall');
-            btn.disabled = true;
-            q('.tl-dlStatus').textContent = 'Installing yt-dlp… this can take a minute.';
-            api('POST', 'TrailerEditor/Downloads/InstallYtDlp').then(function (s) {
-                btn.disabled = false;
-                showDownloadStatus(s);
-            }, function (err) {
-                btn.disabled = false;
-                var fallback = 'Couldn\'t install yt-dlp.';
-                if (err && typeof err.text === 'function') {
-                    err.text().then(function (t) { q('.tl-dlStatus').textContent = t || fallback; }, function () { q('.tl-dlStatus').textContent = fallback; });
-                } else { q('.tl-dlStatus').textContent = fallback; }
-            });
-        });
 
         q('.tl-saveSettings').addEventListener('click', function () {
             loading.show();
@@ -589,7 +559,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 loading.hide();
                 q('.tl-settingsMsg').textContent = 'Settings saved.';
                 loadStatus();
-                loadDownloadStatus();
             }, function () {
                 loading.hide();
                 q('.tl-settingsMsg').textContent = 'Couldn\'t save the settings.';

@@ -15,7 +15,6 @@ Emby's built-in metadata editor doesn't let you change these links. This plugin 
   `https://www.youtube.com/watch?v=ID` link that Emby apps can play
 - see right away whether each YouTube link will actually **play in Emby** (see below)
 - open a **YouTube search** for the title with one click
-- **download** a trailer that won't play and save it with the media (see below)
 - **pin** your links so a metadata refresh (e.g. "Replace all metadata") can't overwrite them
 - **scan your whole library** for titles without trailers and trailer links that are broken
   or won't play
@@ -71,39 +70,6 @@ Saving a link marked ✗ asks for confirmation first, but is still allowed.
 
 Next to the title in the editor, **Search YouTube** opens a YouTube search for
 `<name> <year> trailer` in a new tab, so you can find a replacement link quickly.
-
-### Downloading a trailer that won't play
-
-When a link is marked ✗, a **Download** button appears on its row. It downloads the video with
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) and saves it next to your media as a local trailer,
-which plays from your server instead of YouTube.
-
-- **Install yt-dlp**: the Download panel (or Trailer Library > Settings > Downloads) has an
-  **Install / update yt-dlp** button. It downloads the official release for your system
-  (Linux x64/arm64, Windows, macOS) from GitHub into the plugin's data folder
-  (`<Emby config>/plugins/configurations/TrailerEditor/`). Or enter your own copy's path in the
-  settings.
-- **ffmpeg**: Emby's own ffmpeg is used to merge separate video and audio streams (best quality).
-  If none is found, a single-file format is downloaded instead, which may be lower quality.
-- **Where files go** (Emby's local trailer naming):
-  - Movie: next to the movie file as `<movie file name>-trailer.<ext>`, e.g.
-    `Alien (1979)/Alien (1979)-trailer.mp4`
-  - Movie stored as a folder (Blu-ray/DVD) and TV shows: `<folder>/trailers/<Name> (<Year>)-trailer.<ext>`
-  - If that name is taken, ` 2`, ` 3`, ... is added before `-trailer`.
-  After the download Emby is asked to rescan the title so the trailer shows up. Optionally the
-  YouTube link is removed (a pinned item stays pinned with the remaining links).
-- **Permissions**: Emby must be able to write to the media folder. In Docker, a media volume
-  mounted read-only (`:ro`), or files owned by another user, makes the download fail with a message
-  naming the folder.
-- **Limits**: age-restricted videos need a signed-in YouTube account and can't be downloaded;
-  private or removed videos can't either. Downloads stop after 30 minutes; at most 2 run at once.
-  YouTube changes often, so use **Install / update yt-dlp** if downloads start failing.
-- **Terms**: downloading from YouTube may be against YouTube's terms, and trailers are
-  copyrighted. Only download for your own personal use where that's allowed.
-
-Settings (Trailer Library > Settings > Downloads): yt-dlp path (empty = plugin-managed copy),
-highest video quality (480p to 2160p, default 1080p) and whether to remove the YouTube link after
-downloading (default on).
 
 ### Pinning
 
@@ -200,10 +166,6 @@ All endpoints need an administrator's API key or access token.
 | GET | `/emby/TrailerEditor/Playback/Queue?Limit=10` | Next scanned YouTube links that need a browser playback test |
 | POST | `/emby/TrailerEditor/Playback/Result?VideoId=…&Status=ok\|error\|unknown&Message=…` | Record a browser playback test result |
 | GET | `/emby/TrailerEditor/Scan/Issues?Kind=&SearchTerm=&StartIndex=0&Limit=50` | Scan results, one page at a time. `Kind`: `Unplayable`, `NoTrailers`, `InvalidLink` or `DuplicateLink` |
-| GET | `/emby/TrailerEditor/Downloads/Status` | yt-dlp path, version and ffmpeg path in use |
-| POST | `/emby/TrailerEditor/Downloads/InstallYtDlp` | Download / update the plugin-managed yt-dlp |
-| POST | `/emby/TrailerEditor/Items/{Id}/Download?Url=…&RemoveLink=true` | Download a YouTube trailer for the item in the background |
-| GET | `/emby/TrailerEditor/Items/{Id}/Download` | Current or last download: `State` (`none`, `running`, `done`, `failed`), `Percent`, `Message`, `FilePath` |
 
 `{Id}` is the item's id as shown in Emby web URLs (`…/item?id=12345`); item Guids also work.
 
@@ -228,9 +190,8 @@ dotnet build TrailerEditor/TrailerEditor.csproj -c Release
 
 ## Notes
 
-- Only remote (online) trailer links are edited. Existing local trailer files, such as
-  `Movie-trailer.mkv` or a `trailers` folder next to the movie, are never changed or deleted
-  (downloads only add new files).
+- Only remote (online) trailer links are edited. Local trailer files, such as
+  `Movie-trailer.mkv` or a `trailers` folder next to the movie, are not affected.
 - TV show trailers are set on the series, not on seasons or episodes.
 - If you change an item's trailers some other way while it is pinned, the next metadata
   refresh puts the pinned links back. Unpin it first if you don't want that.

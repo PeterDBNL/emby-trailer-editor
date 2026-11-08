@@ -43,7 +43,7 @@ public class TrailerScorerTests
         var wrongYear = Yt("Dune (1984) Official Trailer");
         var wrongTitle = Yt("Dune Messiah Official Trailer 2030 Hobbit");
         Assert.True(Score(Dune, right) > Score(Dune, wrongYear) + 20);
-        Assert.True(right.Reasons.Contains("year 2021"));
+        Assert.Contains("year 2021", right.Reasons);
         Assert.Contains("different year", wrongYear.Reasons);
         Assert.True(Score(Dune, right) > Score(Dune, wrongTitle));
 

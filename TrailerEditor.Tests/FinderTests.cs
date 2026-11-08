@@ -138,7 +138,7 @@ public class FinderTests
         result = await NewFinder().FindAsync(Dune(), CancellationToken.None);
         Assert.False(result.Found);
         Assert.Contains("unavailable", result.Message);
-        Assert.Empty(result.Candidates.Where(c => c.Status == YouTubeChecker.Error));
+        Assert.DoesNotContain(result.Candidates, c => c.Status == YouTubeChecker.Error);
     }
 
     private const string TmdbVideos = @"{""id"":438631,""results"":[

@@ -75,16 +75,16 @@ public class YouTubeCheckerTests
     }
 
     [Fact]
-    public void NonYouTubeLinksAreNotChecked()
+    public async System.Threading.Tasks.Task NonYouTubeLinksAreNotChecked()
     {
-        var r = new YouTubeChecker().CheckAsync("https://vimeo.com/123", CancellationToken.None).GetAwaiter().GetResult();
+        var r = await new YouTubeChecker().CheckAsync("https://vimeo.com/123", CancellationToken.None);
         Assert.Equal(YouTubeChecker.Unknown, r.Status);
     }
 
     [Fact]
-    public void InvalidLinksAreErrors()
+    public async System.Threading.Tasks.Task InvalidLinksAreErrors()
     {
-        var r = new YouTubeChecker().CheckAsync("not a link", CancellationToken.None).GetAwaiter().GetResult();
+        var r = await new YouTubeChecker().CheckAsync("not a link", CancellationToken.None);
         Assert.Equal(YouTubeChecker.Error, r.Status);
     }
 

@@ -14,8 +14,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     var settingNames = ['PinEditedTrailers', 'ScanReportNoTrailers', 'ScanIgnoreItemsWithLocalTrailers',
         'ScanCheckLinks', 'ScanCheckAgeRestriction', 'ScanBrowserPlaybackTest', 'ScanLearnFromPlayback',
         'ScanRequestDelayMs', 'ScanRecheckDays', 'ScanSchedule', 'ScanScheduleDay', 'ScanScheduleHour',
-        'ScanScheduleAddedWithinDays'];
-    var textSettings = { ScanSchedule: true };
+        'ScanScheduleAddedWithinDays', 'CollectionActionsEnabled', 'TmdbApiKey'];
+    var textSettings = { ScanSchedule: true, TmdbApiKey: true };
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -275,6 +275,65 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
 
         q('.tl-kind').addEventListener('change', function () { issues.reset(); });
+
+        // ---- Recent trailer actions (refreshes while the section is open) ----
+        var actionLabels = { find: 'Find trailer', delete: 'Delete trailer' };
+        var sourceLabels = { collection: 'from a collection', editor: 'from the editor', api: 'from the API' };
+        var outcomeLabels = { ok: 'done', failed: 'failed', 'no match': 'no match' };
+        var actionsTimer = null;
+        var actionsSeq = 0;
+
+        function renderAction(a) {
+            var outcome = a.Outcome || '';
+            return '<div class="tl-row"><div>' +
+                '<div>' + escapeHtml(a.ItemName) + ' <span class="tl-meta">' + escapeHtml(itemMeta(a.Year, a.Type)) + '</span></div>' +
+                '<div class="tl-meta">' + escapeHtml(formatDate(a.TimeUtc)) + ' · ' + escapeHtml(actionLabels[a.Action] || a.Action) +
+                ' · ' + escapeHtml(sourceLabels[a.Source] || a.Source || '') + '</div>' +
+                '<div class="tl-outcome tl-outcome-' + escapeHtml(outcome.replace(/\s+/g, '')) + '">' + escapeHtml(outcomeLabels[outcome] || outcome) +
+                (a.Message ? ': ' + escapeHtml(a.Message) : '') + '</div>' +
+                (a.ChosenUrl ? '<div class="tl-url">' + escapeHtml(a.ChosenUrl) + '</div>' : '') +
+                '</div>' + editButton(a.ItemId) + '</div>';
+        }
+
+        function loadActions() {
+            clearTimeout(actionsTimer);
+            var section = q('.tl-actionsSection');
+            if (!section.open || !self._active) { return; }
+            var mySeq = ++actionsSeq;
+            api('GET', 'TrailerEditor/Actions', { Limit: 50 }).then(function (page) {
+                if (mySeq !== actionsSeq) { return; }
+                var items = page.Items || [];
+                q('.tl-actions').innerHTML = items.length ? items.map(renderAction).join('') :
+                    '<p class="tl-meta">Nothing yet. Add a movie or TV show to the "Trailer Editor: Find trailer" collection in an Emby app, or use Find trailer in the Trailer Editor.</p>';
+                q('.tl-actionsCount').textContent = items.length ? '(' + items.length + ')' : '';
+            }, function () {
+                if (mySeq !== actionsSeq) { return; }
+                q('.tl-actions').innerHTML = '<p class="tl-meta">Couldn\'t load the recent actions.</p>';
+            }).then(function () {
+                if (section.open && self._active) { actionsTimer = setTimeout(loadActions, 5000); }
+            });
+        }
+        q('.tl-actionsSection').addEventListener('toggle', function () {
+            if (this.open) { loadActions(); } else { clearTimeout(actionsTimer); }
+        });
+        q('.tl-actions').addEventListener('click', function (e) {
+            var button = e.target.closest('.tl-edit');
+            if (button) { goToPage('trailereditor', button.getAttribute('data-id')); }
+        });
+
+        function loadCollectionStatus() {
+            api('GET', 'TrailerEditor/Collections').then(function (c) {
+                var box = q('.tl-collectionStatus');
+                if (!c.Enabled) {
+                    box.textContent = 'Collections: off.';
+                } else if (c.FindExists && c.DeleteExists) {
+                    box.textContent = 'Collections ready: "' + c.FindName + '" and "' + c.DeleteName + '" exist.';
+                } else {
+                    box.textContent = 'Collections: ' + (c.FindExists ? '' : '"' + c.FindName + '" ') + (c.DeleteExists ? '' : '"' + c.DeleteName + '" ') +
+                        'not created yet. They are created a short while after the server starts or after you save this setting; check again in a minute.';
+                }
+            }, function () { q('.tl-collectionStatus').textContent = 'Couldn\'t check the collections.'; });
+        }
 
         function onEditClick(e) {
             var button = e.target.closest('.tl-edit');
@@ -548,7 +607,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     } else if (el.type === 'checkbox') {
                         config[name] = el.checked;
                     } else if (textSettings[name]) {
-                        config[name] = el.value;
+                        config[name] = el.value.trim();
                     } else {
                         var n = parseInt(el.value, 10);
                         if (!isNaN(n)) { config[name] = Math.max(0, n); }
@@ -559,6 +618,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 loading.hide();
                 q('.tl-settingsMsg').textContent = 'Settings saved.';
                 loadStatus();
+                // The collections are created in the background after saving.
+                loadCollectionStatus();
+                setTimeout(loadCollectionStatus, 4000);
             }, function () {
                 loading.hide();
                 q('.tl-settingsMsg').textContent = 'Couldn\'t save the settings.';
@@ -649,7 +711,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         this.loadStatus = loadStatus;
         this.loadSettings = loadSettings;
         this.refreshLists = function () { issues.refresh(); pinned.refresh(); };
-        this.stopPolling = function () { clearTimeout(pollTimer); };
+        this.loadActions = loadActions;
+        this.loadCollectionStatus = loadCollectionStatus;
+        this.stopPolling = function () { clearTimeout(pollTimer); clearTimeout(actionsTimer); };
     }
 
     Object.assign(View.prototype, BaseView.prototype);
@@ -659,6 +723,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         this._active = true;
         this.loadStatus();
         this.loadSettings();
+        this.loadCollectionStatus();
+        this.loadActions();
         this.refreshLists();
     };
 

@@ -122,6 +122,22 @@ namespace TrailerEditor.Scanning
             }
         }
 
+        /// <summary>True if a scan or a playback test found this YouTube video can't play in Emby.</summary>
+        public bool IsKnownBroken(string videoId)
+        {
+            if (videoId == null)
+            {
+                return false;
+            }
+
+            lock (_lock)
+            {
+                EnsureLoaded();
+                return (_playback.TryGetValue(videoId, out var r) && r.Status == YouTubeChecker.Error)
+                    || _results.LinkCache.Any(c => c.VideoId == videoId && c.Status == YouTubeChecker.Error);
+            }
+        }
+
         /// <summary>Drops an item's issues and links after it was edited; the next scan re-checks it.</summary>
         public void RemoveIssuesFor(string itemId)
         {

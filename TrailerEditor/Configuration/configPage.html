@@ -38,6 +38,22 @@
                     #trailerEditorPage .te-titleRow .raised { margin: 0; }
                     #trailerEditorPage .te-buttons { display: flex; gap: .5em; flex-wrap: wrap; margin-top: 1em; }
                     #trailerEditorPage .te-buttons .raised { margin: 0; }
+                    #trailerEditorPage .te-titleRow .te-danger { margin-left: auto; }
+                    #trailerEditorPage .te-findPanel { margin: .5em 0 1.2em; padding: .8em; border-radius: 6px; background: rgba(128,128,128,.08); }
+                    #trailerEditorPage .te-findHead { display: flex; align-items: center; justify-content: space-between; gap: .8em; flex-wrap: wrap; margin-bottom: .6em; }
+                    #trailerEditorPage .te-findHead .raised { margin: 0; }
+                    #trailerEditorPage .te-cand { display: flex; align-items: center; gap: .8em; padding: .5em 0; border-top: 1px solid rgba(128,128,128,.2); }
+                    #trailerEditorPage .te-cand .te-thumb { width: 128px; height: 72px; }
+                    #trailerEditorPage .te-cand > div { min-width: 0; flex: 1 1 auto; }
+                    #trailerEditorPage .te-cand .raised { margin: 0; flex: none; }
+                    #trailerEditorPage .te-candTitle { font-weight: 600; word-break: break-word; }
+                    #trailerEditorPage .te-reasons { font-size: .85em; opacity: .65; }
+                    #trailerEditorPage .te-candBest .te-candTitle::after { content: " (best)"; font-weight: 400; opacity: .7; }
+                    #trailerEditorPage details.te-rejected { margin-top: 1.2em; }
+                    #trailerEditorPage details.te-rejected summary { cursor: pointer; }
+                    #trailerEditorPage .te-rej { display: flex; align-items: center; justify-content: space-between; gap: .8em; padding: .4em 0; }
+                    #trailerEditorPage .te-rej > div { min-width: 0; word-break: break-all; }
+                    #trailerEditorPage .te-rej .raised { margin: 0; flex: none; }
                 </style>
 
                 <div class="te-nav">
@@ -66,6 +82,18 @@
                     <div class="te-titleRow">
                         <h3 class="sectionTitle te-editorTitle"></h3>
                         <button is="emby-button" type="button" class="raised te-searchYt"><span>Search YouTube</span></button>
+                        <button is="emby-button" type="button" class="raised te-find"><span>Find trailer</span></button>
+                        <button is="emby-button" type="button" class="raised te-deleteAll te-danger"><span>Delete trailers</span></button>
+                    </div>
+                    <div class="te-findPanel" style="display:none;">
+                        <div class="te-findHead">
+                            <div class="te-findMsg te-meta"></div>
+                            <div>
+                                <button is="emby-button" type="button" class="raised button-submit te-useBest" style="display:none;"><span>Use best &amp; save</span></button>
+                                <button is="emby-button" type="button" class="raised te-findClose"><span>Close</span></button>
+                            </div>
+                        </div>
+                        <div class="te-candidates"></div>
                     </div>
                     <div class="te-links"></div>
                     <div class="te-testPanel" style="display:none;">
@@ -75,6 +103,14 @@
                         <button is="emby-button" type="button" class="raised te-testClose"><span>Close test</span></button>
                     </div>
                     <button is="emby-button" type="button" class="raised te-add"><span>Add trailer link</span></button>
+
+                    <details class="te-rejected">
+                        <summary>Rejected links <span class="te-rejectedCount">(0)</span></summary>
+                        <p class="fieldDescription">
+                            Trailers deleted or removed from this title. They are never picked by Find trailer and are taken off again if a metadata refresh brings them back.
+                        </p>
+                        <div class="te-rejectedList"></div>
+                    </details>
 
                     <div class="checkboxContainer" style="margin-top:1.2em;">
                         <label>

@@ -31,8 +31,8 @@ namespace TrailerEditor
         {
             base.UpdateConfiguration(configuration);
 
-            // Settings were saved from the Trailer Library page: apply the scan schedule.
-            EntryPoint.ApplyScanSchedule();
+            // Settings were saved from the Trailer Library page: apply the scan schedule and the collections.
+            EntryPoint.ApplySettings();
         }
 
         public ImageFormat ThumbImageFormat => ImageFormat.Jpg;

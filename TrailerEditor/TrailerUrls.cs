@@ -37,6 +37,19 @@ namespace TrailerEditor
             return result.ToArray();
         }
 
+        /// <summary>YouTube video id of any YouTube link (or bare id), or null for other or invalid links.</summary>
+        public static string YouTubeIdOf(string value)
+        {
+            try
+            {
+                return YouTubeChecker.VideoIdOf(NormalizeOne((value ?? string.Empty).Trim()));
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
         public static string NormalizeOne(string value)
         {
             if (YouTubeId.IsMatch(value))

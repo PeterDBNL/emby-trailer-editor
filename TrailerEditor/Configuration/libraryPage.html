@@ -50,6 +50,11 @@
                     #trailerLibraryPage .tl-pager { display: flex; align-items: center; gap: .8em; margin-top: .6em; flex-wrap: wrap; }
                     #trailerLibraryPage .tl-pager .raised { margin: 0; }
                     #trailerLibraryPage .tl-settings .inputContainer { max-width: 20em; }
+                    #trailerLibraryPage .tl-settings .tl-wide { max-width: 32em; }
+                    #trailerLibraryPage .tl-outcome { font-size: .9em; margin-top: .15em; }
+                    #trailerLibraryPage .tl-outcome-ok { color: #52b54b; }
+                    #trailerLibraryPage .tl-outcome-failed { color: #e05252; }
+                    #trailerLibraryPage .tl-outcome-nomatch { color: #e0a030; }
                 </style>
 
                 <div class="tl-nav">
@@ -198,6 +203,16 @@
                     </div>
                 </details>
 
+                <details class="tl-actionsSection">
+                    <summary>Recent trailer actions <span class="tl-actionsCount"></span></summary>
+                    <div class="tl-body">
+                        <p class="tl-meta">
+                            Trailers found or deleted from the Trailer Editor, the API, or the "Trailer Editor" collections in the Emby apps. Newest first. Updates while this section is open.
+                        </p>
+                        <div class="tl-actions"></div>
+                    </div>
+                </details>
+
                 <details class="tl-settingsSection">
                     <summary>Settings</summary>
                     <div class="tl-body tl-settings">
@@ -297,6 +312,29 @@
                         <div class="inputContainer">
                             <input is="emby-input" type="number" min="0" max="365" step="1" class="tl-ScanRecheckDays" label="Re-check a link after this many days" />
                             <div class="fieldDescription">Links checked more recently reuse their last result, so weekly scans stay quick. 0 = check every link every time.</div>
+                        </div>
+                        <h3>Trailer search &amp; app actions</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" class="tl-CollectionActionsEnabled" />
+                                <span>Find and delete trailers from the Emby apps (via two collections)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Emby apps don't allow plugins to add menu entries, but every app can add a title to a collection. With this on, the plugin keeps two collections:
+                                <strong>Trailer Editor: Find trailer</strong> and <strong>Trailer Editor: Delete trailer</strong>.
+                                In the web player, the desktop app or a mobile app, open a movie or TV show, choose
+                                <strong>⋯ → Add to collection → Trailer Editor: Find trailer</strong> (or <strong>Delete trailer</strong>).
+                                The title is taken out of the collection again right away and the action runs in the background; see "Recent trailer actions" for the result.
+                                On a season or episode the action applies to its TV show. Anyone who can edit collections can trigger these actions.
+                            </div>
+                            <div class="tl-collectionStatus tl-meta"></div>
+                        </div>
+                        <div class="inputContainer tl-wide">
+                            <input is="emby-input" type="text" class="tl-TmdbApiKey" label="TMDb API key (optional)" autocomplete="off" spellcheck="false" />
+                            <div class="fieldDescription">
+                                Find trailer works without any key by reading YouTube's search results. A free API key from themoviedb.org
+                                (account settings, API) lets it also use TMDb's list of official trailers, which improves picking the official one.
+                            </div>
                         </div>
                         <button is="emby-button" type="button" class="raised button-submit tl-saveSettings"><span>Save settings</span></button>
                         <div class="tl-settingsMsg tl-meta" style="margin-top:.6em;"></div>

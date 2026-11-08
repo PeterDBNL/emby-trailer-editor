@@ -3,13 +3,17 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Tasks;
+using TrailerEditor.Actions;
 using TrailerEditor.Scanning;
+using TrailerEditor.Search;
 
 namespace TrailerEditor
 {
@@ -28,7 +32,8 @@ namespace TrailerEditor
         private readonly ConcurrentDictionary<Guid, byte> _inProgress = new ConcurrentDictionary<Guid, byte>();
 
         public EntryPoint(ILibraryManager libraryManager, ILogManager logManager, IApplicationPaths applicationPaths,
-            IJsonSerializer json, ISessionManager sessionManager, ITaskManager taskManager)
+            IJsonSerializer json, ISessionManager sessionManager, ITaskManager taskManager,
+            ICollectionManager collectionManager, IServerConfigurationManager serverConfiguration)
         {
             _taskManager = taskManager;
             Instance = this;
@@ -36,13 +41,40 @@ namespace TrailerEditor
             _sessionManager = sessionManager;
             _logger = logManager.GetLogger("TrailerEditor");
             Store = new ScanStore(applicationPaths, json, _logger);
-            Manager = new TrailerManager(libraryManager, _logger);
+            Rejected = new RejectedStore(applicationPaths, json, _logger);
+            Manager = new TrailerManager(libraryManager, _logger, Rejected);
+            ActionLog = new ActionLog(applicationPaths, json, _logger);
+            Finder = new TrailerFinder(new HttpFetcher(), () => Checker, Rejected, id => Store.IsKnownBroken(id), _logger);
+            Actions = new TrailerActions(Manager, Finder, ActionLog, () => Plugin.Instance.Configuration,
+                () => serverConfiguration.Configuration.PreferredMetadataLanguage, id => Store.IsKnownBroken(id), _logger);
+            Collections = new CollectionActions(collectionManager, libraryManager, Actions,
+                () => Plugin.Instance.Configuration.CollectionActionsEnabled, _logger);
         }
 
         /// <summary>Results of the last library scan.</summary>
         public static ScanStore Store { get; private set; }
 
         public static TrailerManager Manager { get; private set; }
+
+        /// <summary>Trailer links that were deleted or removed, per item.</summary>
+        public static RejectedStore Rejected { get; private set; }
+
+        /// <summary>Recent find / delete actions.</summary>
+        public static ActionLog ActionLog { get; private set; }
+
+        public static TrailerFinder Finder { get; private set; }
+
+        public static TrailerActions Actions { get; private set; }
+
+        /// <summary>The "Find trailer" / "Delete trailer" collections.</summary>
+        public static CollectionActions Collections { get; private set; }
+
+        /// <summary>Called when the settings were saved.</summary>
+        public static void ApplySettings()
+        {
+            ApplyScanSchedule();
+            Collections?.Wake();
+        }
 
         public static YouTubeChecker Checker { get; internal set; } = new YouTubeChecker();
 
@@ -51,6 +83,13 @@ namespace TrailerEditor
             _libraryManager.ItemUpdated += OnItemUpdated;
             _sessionManager.PlaybackStart += OnPlaybackStart;
             UpgradeSettings();
+
+            // Give the server a moment to finish starting before creating collections.
+            Task.Run(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                Collections.Start();
+            });
         }
 
         /// <summary>Updates settings saved by older versions of the plugin.</summary>
@@ -185,6 +224,7 @@ namespace TrailerEditor
         {
             _libraryManager.ItemUpdated -= OnItemUpdated;
             _sessionManager.PlaybackStart -= OnPlaybackStart;
+            Collections?.Dispose();
         }
     }
 }

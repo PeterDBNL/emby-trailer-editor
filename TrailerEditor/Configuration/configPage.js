@@ -22,6 +22,19 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
         return parts.join(' · ');
     }
 
+    function formatViews(n) {
+        if (n == null || n < 0) { return ''; }
+        if (n >= 1e9) { return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B views'; }
+        if (n >= 1e6) { return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M views'; }
+        if (n >= 1e3) { return Math.round(n / 1e3) + 'K views'; }
+        return n + ' views';
+    }
+
+    function formatDate(value) {
+        var d = new Date(value);
+        return isNaN(d.getTime()) ? '' : d.toLocaleDateString();
+    }
+
     function errorText(err, fallback) {
         if (err && typeof err.text === 'function') {
             return err.text().then(function (t) { return t || fallback; }, function () { return fallback; });
@@ -404,10 +417,141 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             q('.te-unpin').style.display = item.IsPinned ? '' : 'none';
             q('.te-editor').style.display = '';
             q('.te-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            closeFind();
+            loadRejected();
+        }
+
+        // ---- Find trailer ----
+
+        var findSeq = 0;
+        var lastFind = null;
+
+        function closeFind() {
+            findSeq++;
+            lastFind = null;
+            q('.te-findPanel').style.display = 'none';
+            q('.te-candidates').innerHTML = '';
+            q('.te-useBest').style.display = 'none';
+            q('.te-find').disabled = false;
+        }
+
+        function renderCandidates(r) {
+            var list = r.Candidates || [];
+            q('.te-findMsg').textContent = r.Message || '';
+            q('.te-useBest').style.display = r.Found && r.Chosen ? '' : 'none';
+            q('.te-candidates').innerHTML = list.map(function (c, i) {
+                var meta = [c.Channel, c.LengthText, formatViews(c.Views), c.Source === 'tmdb' ? 'from TMDb' : 'from YouTube search']
+                    .filter(function (p) { return p; }).join(' · ');
+                var check = c.Status === 'ok' ? '✓ checked: ' : c.Status === 'unknown' ? '? could not fully check: ' : '';
+                return '<div class="te-cand' + (i === 0 && r.Found ? ' te-candBest' : '') + '" data-id="' + escapeHtml(c.VideoId) + '">' +
+                    '<img class="te-thumb" alt="" src="https://img.youtube.com/vi/' + encodeURIComponent(c.VideoId) + '/mqdefault.jpg" />' +
+                    '<div><div class="te-candTitle">' + escapeHtml(c.Title || c.Url) + '</div>' +
+                    '<div class="te-meta">' + escapeHtml(meta) + '</div>' +
+                    '<div class="te-reasons">' + escapeHtml(check + 'score ' + Math.round(c.Score) + (c.Reasons && c.Reasons.length ? ' (' + c.Reasons.join(', ') + ')' : '')) + '</div></div>' +
+                    '<button is="emby-button" type="button" class="raised te-use" data-url="' + escapeHtml(c.Url) + '"><span>Use this</span></button>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function findTrailer() {
+            if (!current) { return; }
+            var seq = ++findSeq;
+            var button = q('.te-find');
+            button.disabled = true;
+            q('.te-findPanel').style.display = '';
+            q('.te-candidates').innerHTML = '';
+            q('.te-useBest').style.display = 'none';
+            q('.te-findMsg').textContent = 'Searching for the best trailer… this can take up to a minute.';
+            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(current.Id) + '/Find', { Apply: false }).then(function (r) {
+                if (seq !== findSeq) { return; }
+                button.disabled = false;
+                lastFind = r;
+                renderCandidates(r);
+            }, function (err) {
+                if (seq !== findSeq) { return; }
+                button.disabled = false;
+                errorText(err, 'The search failed.').then(function (t) { q('.te-findMsg').textContent = t; });
+            });
+        }
+
+        // Puts a link at the top of the list (replacing a row that has the same video); the person presses Save.
+        function useLink(url) {
+            var id = youTubeId(url);
+            Array.prototype.slice.call(view.querySelectorAll('.te-link')).forEach(function (row) {
+                var value = row.querySelector('.te-url').value.trim();
+                if (!value || (id && youTubeId(value) === id)) {
+                    if (testRow === row) { stopTest(); }
+                    row.parentNode.removeChild(row);
+                }
+            });
+            var input = addLinkRow(url);
+            var row = input.closest('.te-link');
+            var links = q('.te-links');
+            links.insertBefore(row, links.firstChild);
+        }
+
+        function useCandidate(url, thenSave) {
+            useLink(url);
+            if (thenSave) {
+                save();
+            } else {
+                showMessage('Added the trailer at the top of the list. Press Save to keep it.', false);
+            }
+        }
+
+        function deleteTrailers() {
+            if (!current) { return; }
+            if (!window.confirm('Delete all trailer links of "' + current.Name + '"?\n\nThey will not be picked again by Find trailer, and refreshes will not bring them back.')) { return; }
+            var id = current.Id;
+            loading.show();
+            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(id) + '/DeleteTrailers').then(function (r) {
+                return api('GET', 'TrailerEditor/Items/' + encodeURIComponent(id)).then(function (item) {
+                    loading.hide();
+                    openEditor(item);
+                    showMessage(r.Message || 'Trailers deleted.', !r.Ok);
+                });
+            }).then(null, function (err) {
+                loading.hide();
+                errorText(err, 'Deleting the trailers failed.').then(function (t) { showMessage(t, true); });
+            });
+        }
+
+        // ---- Rejected links ----
+
+        function loadRejected() {
+            var item = current;
+            if (!item) { return; }
+            api('GET', 'TrailerEditor/Items/' + encodeURIComponent(item.Id) + '/Rejected').then(function (page) {
+                if (current !== item) { return; }
+                renderRejected(page.Items || []);
+            }, function () {
+                q('.te-rejectedList').innerHTML = '<p class="te-meta">Couldn\'t load the rejected links.</p>';
+            });
+        }
+
+        function renderRejected(items) {
+            q('.te-rejectedCount').textContent = '(' + items.length + ')';
+            q('.te-rejectedList').innerHTML = items.length ? items.map(function (l) {
+                return '<div class="te-rej" data-id="' + escapeHtml(l.VideoId) + '"><div>' + escapeHtml(l.Url) +
+                    '<div class="te-meta">' + escapeHtml(l.Reason || '') + (l.RejectedUtc ? ' · ' + escapeHtml(formatDate(l.RejectedUtc)) : '') + '</div></div>' +
+                    '<button is="emby-button" type="button" class="raised te-allow" data-id="' + escapeHtml(l.VideoId) + '"><span>Allow again</span></button></div>';
+            }).join('') : '<p class="te-meta">Nothing rejected for this title.</p>';
+        }
+
+        function allowAgain(videoId) {
+            if (!current) { return; }
+            var item = current;
+            api('POST', 'TrailerEditor/Items/' + encodeURIComponent(item.Id) + '/Rejected/Allow', { VideoId: videoId }).then(function (page) {
+                if (current !== item) { return; }
+                renderRejected(page.Items || []);
+            }, function (err) {
+                errorText(err, 'Couldn\'t allow that link again.').then(function (t) { showMessage(t, true); });
+            });
         }
 
         function closeEditor() {
             stopTest();
+            closeFind();
             current = null;
             q('.te-editor').style.display = 'none';
         }
@@ -490,6 +634,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox'], fu
             if (!current) { return; }
             var query = [current.Name, current.Year, 'trailer'].filter(function (p) { return p; }).join(' ');
             window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query), '_blank', 'noopener');
+        });
+        q('.te-find').addEventListener('click', findTrailer);
+        q('.te-findClose').addEventListener('click', closeFind);
+        q('.te-deleteAll').addEventListener('click', deleteTrailers);
+        q('.te-useBest').addEventListener('click', function () {
+            if (lastFind && lastFind.Chosen) { useCandidate(lastFind.Chosen.Url, true); }
+        });
+        q('.te-candidates').addEventListener('click', function (e) {
+            var button = e.target.closest('.te-use');
+            if (button) { useCandidate(button.getAttribute('data-url'), false); }
+        });
+        q('.te-rejectedList').addEventListener('click', function (e) {
+            var button = e.target.closest('.te-allow');
+            if (button) { allowAgain(button.getAttribute('data-id')); }
         });
         q('.te-add').addEventListener('click', function () { addLinkRow('').focus(); });
         q('.te-save').addEventListener('click', save);

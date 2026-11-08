@@ -47,6 +47,17 @@ namespace TrailerEditor.Configuration
         /// <summary>Automatic scans only cover titles added in the last this many days; 0 = the whole library.</summary>
         public int ScanScheduleAddedWithinDays { get; set; } = 0;
 
+        // ---- Trailer search & app actions ----
+
+        /// <summary>
+        /// Keep two collections ("Trailer Editor: Find trailer" / "Delete trailer") that trigger actions
+        /// when a movie or TV show is added to them from any Emby app.
+        /// </summary>
+        public bool CollectionActionsEnabled { get; set; } = true;
+
+        /// <summary>Optional free API key from themoviedb.org; adds TMDb's official trailer list to the search.</summary>
+        public string TmdbApiKey { get; set; } = string.Empty;
+
         /// <summary>Used to update settings saved by older versions. Missing in old files, so it reads as 0.</summary>
         public int ConfigVersion { get; set; }
 

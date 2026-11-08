@@ -25,6 +25,10 @@ All versions: [Releases](https://github.com/PeterDBNL/emby-trailer-editor/releas
   added titles, now or on a daily or weekly schedule.
 - Optional copyright-block test in your browser, which catches videos the server can't judge.
 - Learns from trailers that play in Emby, so fewer links need testing.
+- **Find trailer** picks the best trailer for you (YouTube search, optionally TMDb's official list),
+  and **Delete trailers** removes them for good. Both work from the web player, the desktop app and
+  the mobile apps through two special collections, and from the Trailer Editor page.
+- Deleted trailers are remembered per title and never picked or restored again.
 
 ## Screenshots
 
@@ -94,6 +98,54 @@ default), the plugin remembers your links and puts them back if a refresh change
 trailers some other way, the next refresh puts the pinned links back, so unpin first if you
 don't want that.
 
+### Find and delete trailers (also from the Emby apps)
+
+**From the Emby apps.** Emby apps don't let plugins add menu entries, but every app (web player,
+desktop app, mobile apps) can add a title to a collection. The plugin therefore keeps two
+collections, created automatically a short while after the server starts:
+
+- **Trailer Editor: Find trailer**
+- **Trailer Editor: Delete trailer**
+
+On a movie or TV show open the **⋯** menu, choose **Add to collection** and pick one of them.
+The title is taken out of the collection again right away and the action runs in the background
+(titles are handled one at a time). On a season or episode the action applies to its TV show.
+See **Recent trailer actions** on the Trailer Library page for what happened.
+
+**Find trailer** looks for the best trailer and puts it first in the title's links (pinned). The
+title's other working links are kept (at most 3 links in total). The search:
+
+1. Collects candidates from YouTube's search page for "title year trailer" (also with the original
+   title, if different), and, if you set a TMDb API key, from TMDb's trailer list for the title.
+2. Drops videos that were deleted from this title, and videos known not to play in Emby.
+3. Scores the rest: how well the video title matches (and the year), "official trailer", TMDb's
+   *official* flag and language, verified channels, a sensible length and view count, and heavy
+   penalties for reactions, reviews, fan-made or concept trailers, full movies, "explained",
+   clips, behind the scenes, soundtracks and similar. Weak matches are not used.
+4. Checks the best ones with YouTube, in order, and takes the first that will play in Emby.
+
+On the Trailer Editor page, **Find trailer** shows the best candidates (thumbnail, channel,
+length, score and why) without changing anything. **Use this** puts one first in the link list,
+**Use best & save** saves the top one right away.
+
+**Delete trailers** removes all links of a title and unpins it.
+
+**Rejected links.** Every deleted link, and every link you remove in the editor and save, is
+remembered for that title. Find trailer never picks it again, and if a metadata refresh brings it
+back it is taken off again. Open *Rejected links* in the editor to see them and press
+**Allow again**. Saving a rejected link in the editor also allows it again.
+
+**TMDb (optional).** Find trailer needs no keys. A free API key from
+[themoviedb.org](https://www.themoviedb.org/settings/api) (*Trailer Library → Settings → TMDb API
+key*) adds TMDb's list of official trailers, in your server's metadata language, which helps pick
+the official one.
+
+**Good to know.** The YouTube search reads YouTube's public search page; it is unofficial and
+may stop working if YouTube changes it. Copyright blocks can't be detected on the server, so a
+pick may occasionally be blocked in some countries: delete it and find again, it won't be picked
+twice. Anyone who can edit collections in Emby can trigger these actions. Turn the collections
+off under *Trailer Library → Settings → Trailer search & app actions*.
+
 ### Trailer Library
 
 Open it from the side menu, or with the *Library scan & pinned items* button on the Trailer
@@ -125,7 +177,8 @@ scheduled scans check the whole library (the default) or only recently added tit
 interrupted, the page shows how many links were tested and a **Continue copyright-block test**
 button; starting a new scan clears the stop.
 
-**Scan results**, **Pinned items** and **Settings** are collapsible sections. The lists load
+**Scan results**, **Pinned items**, **Recent trailer actions** (the last 200 finds and deletes,
+newest first) and **Settings** are collapsible sections. The lists load
 when opened, are searchable by title and paged 50 at a time, so they stay fast with tens of
 thousands of titles.
 
@@ -175,6 +228,12 @@ All endpoints need an administrator's API key or access token.
 | GET | `/emby/TrailerEditor/Playback/Queue?Limit=10` | Next scanned YouTube links that need a browser playback test |
 | POST | `/emby/TrailerEditor/Playback/Result?VideoId=…&Status=ok\|error\|unknown&Message=…` | Record a browser playback test result |
 | GET | `/emby/TrailerEditor/Scan/Issues?Kind=&SearchTerm=&StartIndex=0&Limit=50` | Scan results, one page at a time. `Kind`: `Unplayable`, `NoTrailers`, `InvalidLink` or `DuplicateLink` |
+| POST | `/emby/TrailerEditor/Items/{Id}/Find?Apply=false` | Search for the best trailer. `Apply=true` puts it first on the item (pinned); otherwise only the candidates are returned |
+| POST | `/emby/TrailerEditor/Items/{Id}/DeleteTrailers` | Delete all trailer links, remember them as rejected and unpin |
+| GET | `/emby/TrailerEditor/Items/{Id}/Rejected` | Links deleted or removed from the item |
+| POST | `/emby/TrailerEditor/Items/{Id}/Rejected/Allow?VideoId=…` | Allow a rejected link again |
+| GET | `/emby/TrailerEditor/Actions?Limit=50` | Recent find / delete actions, newest first |
+| GET | `/emby/TrailerEditor/Collections` | Whether the Find / Delete trailer collections exist |
 
 `{Id}` is the item's id as shown in Emby web URLs (`…/item?id=12345`); item Guids also work.
 
@@ -200,7 +259,7 @@ dotnet build TrailerEditor/TrailerEditor.csproj -c Release
 **Releases.** Bump the version in `TrailerEditor/TrailerEditor.csproj` and push to the default
 branch. GitHub Actions builds and tests it and, if there's no release for that version yet,
 publishes release `vX.Y.Z` with `TrailerEditor.zip` attached. Pushing a matching tag (e.g.
-`v1.9.1` for version `1.9.1.0`) does the same. Every other build uploads the zip as a workflow
+`v1.10.0` for version `1.10.0.0`) does the same. Every other build uploads the zip as a workflow
 artifact.
 
 ## Notes and limitations
@@ -209,5 +268,9 @@ artifact.
   `Movie-trailer.mkv` or a `trailers` folder next to the movie, are not affected.
 - TV show trailers are set on the series, not on seasons or episodes.
 - The server-side scan can't detect copyright blocks; that needs the browser test above.
+- Rejected links are tracked by YouTube video id, so links to other sites can't be rejected.
+- Settings added in 1.10: *Find and delete trailers from the Emby apps* (on by default) and the
+  optional *TMDb API key*, both under *Trailer Library → Settings*. The plugin also saves
+  `TrailerEditor.rejected.json` and `TrailerEditor.actions.json` next to its other config files.
 
 This project is not affiliated with Emby or YouTube.

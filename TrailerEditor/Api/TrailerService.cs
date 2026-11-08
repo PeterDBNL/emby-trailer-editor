@@ -11,7 +11,9 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 using MediaBrowser.Model.Tasks;
+using TrailerEditor.Actions;
 using TrailerEditor.Scanning;
+using TrailerEditor.Search;
 
 namespace TrailerEditor.Api
 {
@@ -205,6 +207,63 @@ namespace TrailerEditor.Api
     {
         [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
         public string Id { get; set; }
+    }
+
+    [Route("/TrailerEditor/Items/{Id}/Find", "POST", Summary = "Searches for the best trailer of an item. Apply=false only returns the candidates")]
+    public class FindTrailer : IReturn<FindResult>
+    {
+        [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
+        public string Id { get; set; }
+
+        [ApiMember(Name = "Apply", Description = "True to put the best trailer first on the item (pinned); false (default) only lists candidates.", DataType = "bool", ParameterType = "query")]
+        public bool? Apply { get; set; }
+    }
+
+    [Route("/TrailerEditor/Items/{Id}/DeleteTrailers", "POST", Summary = "Deletes all trailer links of an item and remembers them so they aren't picked again")]
+    public class DeleteTrailers : IReturn<DeleteResult>
+    {
+        [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
+        public string Id { get; set; }
+    }
+
+    public class RejectedPage
+    {
+        public RejectedLink[] Items { get; set; }
+        public int TotalRecordCount { get; set; }
+    }
+
+    [Route("/TrailerEditor/Items/{Id}/Rejected", "GET", Summary = "Lists the trailer links that were deleted from an item")]
+    public class GetRejected : IReturn<RejectedPage>
+    {
+        [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
+        public string Id { get; set; }
+    }
+
+    [Route("/TrailerEditor/Items/{Id}/Rejected/Allow", "POST", Summary = "Allows a deleted trailer link again")]
+    public class AllowRejected : IReturn<RejectedPage>
+    {
+        [ApiMember(Name = "Id", IsRequired = true, DataType = "string", ParameterType = "path")]
+        public string Id { get; set; }
+
+        [ApiMember(Name = "VideoId", IsRequired = true, DataType = "string", ParameterType = "query")]
+        public string VideoId { get; set; }
+    }
+
+    public class ActionPage
+    {
+        public ActionRecord[] Items { get; set; }
+        public int TotalRecordCount { get; set; }
+    }
+
+    [Route("/TrailerEditor/Actions", "GET", Summary = "Lists recent trailer find / delete actions, newest first")]
+    public class GetActions : IReturn<ActionPage>
+    {
+        public int? Limit { get; set; }
+    }
+
+    [Route("/TrailerEditor/Collections", "GET", Summary = "Shows whether the Find / Delete trailer collections exist")]
+    public class GetCollectionStatus : IReturn<CollectionStatus>
+    {
     }
 
     [Authenticated(Roles = "Admin")]
@@ -427,8 +486,8 @@ namespace TrailerEditor.Api
                     "To remove all trailers, send Clear=true.");
             }
 
-            // Throws ArgumentException (HTTP 400) for invalid links.
-            Manager.SetTrailers(item, urls, request.Pin ?? true);
+            // Throws ArgumentException (HTTP 400) for invalid links. Links missing from the list are rejected.
+            Manager.SaveEdited(item, urls, request.Pin ?? true);
             return ToInfo(item);
         }
 
@@ -438,6 +497,43 @@ namespace TrailerEditor.Api
         public async Task<object> Get(CheckLink request)
         {
             return await EntryPoint.Checker.CheckAsync(request.Url, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        public async Task<object> Post(FindTrailer request)
+        {
+            var item = RequireItem(request.Id);
+            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90)))
+            {
+                return await EntryPoint.Actions.FindAsync(item, request.Apply == true, ActionSources.Editor, timeout.Token).ConfigureAwait(false);
+            }
+        }
+
+        public object Post(DeleteTrailers request)
+        {
+            return EntryPoint.Actions.Delete(RequireItem(request.Id), ActionSources.Editor);
+        }
+
+        public object Get(GetRejected request) => RejectedFor(RequireItem(request.Id));
+
+        public object Post(AllowRejected request)
+        {
+            var item = RequireItem(request.Id);
+            Manager.Rejected.Allow(TrailerManager.Key(item), request.VideoId);
+            return RejectedFor(item);
+        }
+
+        public object Get(GetActions request)
+        {
+            var items = EntryPoint.ActionLog.Recent(Math.Max(1, Math.Min(request.Limit ?? 50, ActionLog.Capacity))).ToArray();
+            return new ActionPage { Items = items, TotalRecordCount = items.Length };
+        }
+
+        public object Get(GetCollectionStatus request) => EntryPoint.Collections.GetStatus();
+
+        private static RejectedPage RejectedFor(BaseItem item)
+        {
+            var links = Manager.Rejected.Get(TrailerManager.Key(item)).ToArray();
+            return new RejectedPage { Items = links, TotalRecordCount = links.Length };
         }
 
         public object Delete(UnpinItem request)

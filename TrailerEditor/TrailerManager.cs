@@ -4,6 +4,7 @@ using System.Linq;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
+using TrailerEditor.Actions;
 using TrailerEditor.Configuration;
 
 namespace TrailerEditor
@@ -17,11 +18,19 @@ namespace TrailerEditor
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
 
-        public TrailerManager(ILibraryManager libraryManager, ILogger logger)
+        private readonly Action<BaseItem> _persist;
+
+        /// <param name="persist">Saves an item after its links changed; the default writes to Emby's library. Tests pass their own.</param>
+        public TrailerManager(ILibraryManager libraryManager, ILogger logger, RejectedStore rejected = null, Action<BaseItem> persist = null)
         {
             _libraryManager = libraryManager;
             _logger = logger;
+            Rejected = rejected;
+            _persist = persist ?? (item => item.UpdateToRepository(ItemUpdateType.MetadataEdit));
         }
+
+        /// <summary>Links that were deleted or removed from items; null in tests that don't need it.</summary>
+        public RejectedStore Rejected { get; }
 
         private static PluginConfiguration Config => Plugin.Instance.Configuration;
 
@@ -66,7 +75,7 @@ namespace TrailerEditor
             var normalized = TrailerUrls.Normalize(urls);
 
             item.RemoteTrailers = normalized;
-            item.UpdateToRepository(ItemUpdateType.MetadataEdit);
+            _persist(item);
             _logger.Info("Trailer Editor: set {0} trailer link(s) on {1} ({2})", normalized.Length, item.Name, item.InternalId);
 
             lock (_lock)
@@ -88,6 +97,50 @@ namespace TrailerEditor
             return normalized;
         }
 
+        /// <summary>
+        /// Saves links edited by a person. Links that were on the item but are missing now are
+        /// rejected (so the trailer finder and refreshes don't bring them back); links that were
+        /// rejected earlier but are saved again are allowed again.
+        /// </summary>
+        public string[] SaveEdited(BaseItem item, IEnumerable<string> urls, bool pin)
+        {
+            var normalized = TrailerUrls.Normalize(urls); // throws for invalid links before anything changes
+            if (Rejected != null)
+            {
+                var key = Key(item);
+                var keptIds = new HashSet<string>(normalized.Select(TrailerUrls.YouTubeIdOf).Where(id => id != null));
+                foreach (var id in keptIds)
+                {
+                    Rejected.Allow(key, id);
+                }
+
+                var removed = (item.RemoteTrailers ?? new string[0])
+                    .Where(u => { var id = TrailerUrls.YouTubeIdOf(u); return id != null && !keptIds.Contains(id); })
+                    .ToList();
+                Rejected.Reject(key, item.Name, removed, RejectedStore.ReasonRemovedInEditor);
+            }
+
+            return SetTrailers(item, normalized, pin);
+        }
+
+        /// <summary>
+        /// Removes all trailer links of an item, rejects them so they don't come back, and unpins the item.
+        /// Returns how many links were removed.
+        /// </summary>
+        public int DeleteTrailers(BaseItem item)
+        {
+            var current = item.RemoteTrailers ?? new string[0];
+            var pinned = GetOverride(item)?.Urls ?? new string[0];
+            Rejected?.Reject(Key(item), item.Name, current.Concat(pinned), RejectedStore.ReasonDeleted);
+
+            item.RemoteTrailers = new string[0];
+            _persist(item);
+            Unpin(item);
+            EntryPoint.Store?.RemoveIssuesFor(item.InternalId.ToString());
+            _logger.Info("Trailer Editor: deleted {0} trailer link(s) of {1} ({2})", current.Length, item.Name, item.InternalId);
+            return current.Length;
+        }
+
         public void Unpin(BaseItem item)
         {
             lock (_lock)
@@ -104,27 +157,31 @@ namespace TrailerEditor
         /// </summary>
         public bool ReapplyIfChanged(BaseItem item)
         {
-            if (item == null || !Config.PinEditedTrailers || !IsSupported(item))
+            if (item == null || !IsSupported(item))
             {
                 return false;
             }
 
-            var pinned = GetOverride(item);
-            if (pinned == null)
-            {
-                return false;
-            }
-
-            var wanted = pinned.Urls ?? new string[0];
             var current = item.RemoteTrailers ?? new string[0];
+            var pinned = Config.PinEditedTrailers ? GetOverride(item) : null;
+            var wanted = pinned != null ? pinned.Urls ?? new string[0] : current;
+
+            // A refresh can bring back links the person deleted; never keep (or restore) those.
+            if (Rejected != null)
+            {
+                var key = Key(item);
+                wanted = wanted.Where(u => !Rejected.IsRejectedUrl(key, u)).ToArray();
+            }
+
             if (current.SequenceEqual(wanted, StringComparer.Ordinal))
             {
                 return false;
             }
 
             item.RemoteTrailers = wanted;
-            item.UpdateToRepository(ItemUpdateType.MetadataEdit);
-            _logger.Info("Trailer Editor: restored pinned trailer link(s) on {0} ({1})", item.Name, item.InternalId);
+            _persist(item);
+            _logger.Info("Trailer Editor: {0} trailer link(s) on {1} ({2})",
+                pinned != null ? "restored pinned" : "removed rejected", item.Name, item.InternalId);
             return true;
         }
 
@@ -177,6 +234,6 @@ namespace TrailerEditor
             return page;
         }
 
-        private static string Key(BaseItem item) => item.Id.ToString("N");
+        public static string Key(BaseItem item) => item.Id.ToString("N");
     }
 }
